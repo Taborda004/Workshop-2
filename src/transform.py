@@ -1,348 +1,151 @@
 """
-transform.py — Transformation and cross-source integration for the
-Reliable Music Pipeline.
+Transformation and Integration Module: Workshop-2 ETL Pipeline.
 
-Input : spotify_raw.parquet  (from extract_spotify)
-        grammy_raw.parquet   (from extract_grammys)
-Output: music_prepared.parquet
-
-Integration Contract
-────────────────────
-Grain            : One observation per unique Spotify Track × Genre.
-Integration key  : Spotify `primary_artist` ↔ Grammy `artist`
-                   (both normalised to lowercase-stripped form)
-Cardinality      : Many-to-one (many track-genre observations per artist;
-                   one aggregated artist profile)
-Unmatched records: Spotify tracks whose primary_artist has no Grammy record
-                   → has_grammy=0, grammy_wins=0, grammy_nominations=0,
-                     first_grammy_year=NA, first_grammy_decade='Non-Grammy'
-Assumptions      : Primary artist is the first token before ";" in the
-                   Spotify artists field.
+Single coherent engineering phase that:
+1. Cleans missing attribute identities (drops unidentifiable records).
+2. Deduplicates Spotify catalog to analytical grain (track_id, track_genre),
+   preserving exactly 113,549 valid observations.
+3. Normalizes artist names across sources.
+4. Aggregates Grammy historical awards into artist-level dimensional metrics.
+5. Implements the Integration Contract (N:1 Spotify-to-Grammy matching).
+6. Derives analytical attributes (has_grammy, nomination_tier, is_high_popularity, first_grammy_decade).
+7. Persists prepared analytical dataset as Parquet for validation and loading.
 """
 
-import logging
-import os
 from pathlib import Path
-
+from datetime import datetime
 import pandas as pd
+import numpy as np
 
-log = logging.getLogger(__name__)
-
-# Dynamic Path Resolution
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-_raw_data_dir = os.environ.get("AIRFLOW_WORK_DIR")
-if _raw_data_dir:
-    WORK_DIR = Path(_raw_data_dir)
-else:
-    WORK_DIR = PROJECT_ROOT / "data" / "work"
-
-_raw_output_dir = os.environ.get("AIRFLOW_OUTPUT_DIR")
-if _raw_output_dir:
-    OUTPUT_DIR = Path(_raw_output_dir)
-else:
-    OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
-
-PREPARED_PATH = WORK_DIR / "music_prepared.parquet"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_WORK_DIR = BASE_DIR / "data" / "work"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _normalise_artist(name: pd.Series) -> pd.Series:
+def transform_and_integrate(spotify_raw_path: str, grammys_raw_path: str, work_dir: str = None) -> str:
     """
-    Lowercase + strip normalisation for artist-name matching.
-    Collapses multiple whitespaces into a single space.
+    Execute full data transformation, cleaning, and cross-source integration.
+
+    Returns:
+        str: Absolute path to the prepared analytical Parquet file.
     """
-    return (
-        name.astype("string")
-        .str.strip()
-        .str.lower()
-        .str.replace(r"\s+", " ", regex=True)
-    )
+    work_path = Path(work_dir) if work_dir else DEFAULT_WORK_DIR
+    work_path.mkdir(parents=True, exist_ok=True)
 
+    print("=" * 70)
+    print("WORKSHOP-2: TRANSFORMATION AND INTEGRATION STAGE")
+    print("=" * 70)
 
-def _extract_primary_artist(artists_col: pd.Series) -> pd.Series:
-    """
-    Extract the first artist from a semicolon-separated list.
-    Example: "Ingrid Michaelson;ZAYN" → "Ingrid Michaelson"
-    """
-    return (
-        artists_col.astype("string")
-        .str.split(";")
-        .str[0]
-        .str.strip()
-    )
+    # 1. Load Raw Sources
+    print(f"[TRANSFORM] Loading raw Spotify from: {spotify_raw_path}")
+    df_sp = pd.read_parquet(spotify_raw_path)
+    raw_sp_count = len(df_sp)
 
+    print(f"[TRANSFORM] Loading raw Grammy from: {grammys_raw_path}")
+    df_gr = pd.read_parquet(grammys_raw_path)
+    raw_gr_count = len(df_gr)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 1 — CLEAN SPOTIFY
-# ─────────────────────────────────────────────────────────────────────────────
+    # 2. Handle Missing Core Identity
+    null_artist_mask = df_sp["artists"].isnull() | df_sp["track_name"].isnull()
+    null_rows_count = null_artist_mask.sum()
+    df_sp_clean = df_sp[~null_artist_mask].copy()
+    print(f"[TRANSFORM] Excluded {null_rows_count} unidentifiable tracks (null artists/track_name).")
 
-def _clean_spotify(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply documented cleaning and standardisation rules to the raw Spotify data.
+    # 3. Deduplicate at Composite Grain (track_id, track_genre)
+    dups_before = df_sp_clean.duplicated(subset=["track_id", "track_genre"]).sum()
+    df_sp_dedup = df_sp_clean.drop_duplicates(subset=["track_id", "track_genre"]).copy()
+    print(f"[TRANSFORM] Removed {dups_before} exact technical duplicate pairs.")
+    print(f"[TRANSFORM] Cleaned analytical Spotify catalog: {len(df_sp_dedup):,} rows.")
 
-    Rules applied
-    ─────────────
-    T-SP-01 Deduplicate (track_id, track_genre) keeping highest-popularity row.
-            Justification: Enforces the approved Phase 0 grain: Track × Genre.
-            Tracks present in multiple genres retain their multi-genre observations.
-    T-SP-02 Extract primary_artist from semicolon-separated artists field.
-            Justification: Integration key; Grammy records reference individual artists.
-    T-SP-03 Drop rows where primary_artist is null.
-            Justification: Cannot integrate without an artist name.
-    T-SP-04 Drop rows where track_genre is null.
-            Justification: REQ-01, REQ-02, REQ-03 group by genre.
-    T-SP-05 Coerce audio feature columns to float; set non-finite values to NaN.
-            Justification: Downstream SQL loading requires numeric precision.
-    T-SP-06 Normalise explicit to 0/1 integer.
-    """
-    rows_before = len(df)
-    log.info("Cleaning Spotify data. Input rows: %d", rows_before)
+    # 4. Prepare and Aggregate Grammy Source
+    gr_clean = df_gr.copy()
+    # Resolve artist from nominee when category is Best New Artist
+    bna_mask = gr_clean["artist"].isnull() & (gr_clean["category"] == "Best New Artist")
+    gr_clean.loc[bna_mask, "artist"] = gr_clean.loc[bna_mask, "nominee"]
 
-    # T-SP-01 Deduplicate on Track x Genre
-    df = (
-        df.sort_values("popularity", ascending=False)
-        .drop_duplicates(subset=["track_id", "track_genre"], keep="first")
-        .reset_index(drop=True)
-    )
-    log.info("T-SP-01 Track x Genre dedup: %d → %d rows", rows_before, len(df))
-    print(f"[TRANSFORM] T-SP-01 Track x Genre deduplicated: {rows_before} → {len(df)} rows")
+    gr_valid = gr_clean.dropna(subset=["artist"]).copy()
+    gr_valid["artist_clean"] = gr_valid["artist"].astype(str).str.strip()
+    gr_valid["artist_norm"] = gr_valid["artist_clean"].str.lower()
 
-    # T-SP-02 Primary artist
-    df["primary_artist"] = _extract_primary_artist(df["artists"])
+    # Aggregate to Artist Grain
+    grammy_agg = gr_valid.groupby("artist_norm").agg(
+        official_artist_name=("artist_clean", "first"),
+        total_nominations=("winner", "count"),
+        total_wins=("winner", "sum"),
+        first_grammy_year=("year", "min")
+    ).reset_index()
 
-    # T-SP-03 Drop null primary_artist
-    before = len(df)
-    df = df.dropna(subset=["primary_artist"]).copy()
-    print(f"[TRANSFORM] T-SP-03 dropped null artist: {before - len(df)} rows removed")
+    grammy_agg["first_grammy_decade"] = (grammy_agg["first_grammy_year"] // 10 * 10).astype(str) + "s"
 
-    # T-SP-04 Drop null track_genre
-    before = len(df)
-    df = df.dropna(subset=["track_genre"]).copy()
-    print(f"[TRANSFORM] T-SP-04 dropped null genre: {before - len(df)} rows removed")
+    def get_tier(n):
+        if n == 0:
+            return "0"
+        elif 1 <= n <= 2:
+            return "1-2"
+        elif 3 <= n <= 5:
+            return "3-5"
+        elif 6 <= n <= 10:
+            return "6-10"
+        else:
+            return ">10"
 
-    # T-SP-05 Audio feature coercion
-    audio_cols = [
-        "danceability", "energy", "loudness", "speechiness",
-        "acousticness", "instrumentalness", "liveness", "valence", "tempo",
-    ]
-    for col in audio_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    grammy_agg["nomination_tier"] = grammy_agg["total_nominations"].apply(get_tier)
+    print(f"[TRANSFORM] Aggregated {len(grammy_agg):,} distinct recognized Grammy artists.")
 
-    # T-SP-06 Explicit as int
-    df["explicit"] = df["explicit"].astype(int)
+    # 5. Cross-Source Integration (Integration Contract: N:1 Matching)
+    g_lookup = grammy_agg.set_index("artist_norm").to_dict("index")
 
-    # Normalised key for matching
-    df["_artist_key"] = _normalise_artist(df["primary_artist"])
+    def match_artists(artists_str):
+        parts = [p.strip().lower() for p in str(artists_str).split(";")]
+        best = None
+        for p in parts:
+            if p in g_lookup:
+                entry = g_lookup[p]
+                if best is None or entry["total_nominations"] > best["total_nominations"]:
+                    best = entry
+        return best
 
-    log.info("Spotify cleaning complete. Output rows: %d", len(df))
-    return df
+    matches = df_sp_dedup["artists"].apply(match_artists)
 
+    # 6. Derive Analytical Attributes
+    df_sp_dedup["has_grammy"] = matches.apply(lambda x: 1 if x is not None else 0).astype(int)
+    df_sp_dedup["total_nominations"] = matches.apply(lambda x: x["total_nominations"] if x is not None else 0).astype(int)
+    df_sp_dedup["total_wins"] = matches.apply(lambda x: x["total_wins"] if x is not None else 0).astype(int)
+    df_sp_dedup["nomination_tier"] = matches.apply(lambda x: x["nomination_tier"] if x is not None else "0")
+    df_sp_dedup["first_grammy_year"] = matches.apply(lambda x: int(x["first_grammy_year"]) if x is not None else None)
+    df_sp_dedup["first_grammy_decade"] = matches.apply(lambda x: x["first_grammy_decade"] if x is not None else "Sin Grammy")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 2 — CLEAN GRAMMY
-# ─────────────────────────────────────────────────────────────────────────────
+    # REQ-03 High Popularity Indicator (P75 empirical threshold = 50.0)
+    df_sp_dedup["is_high_popularity"] = (df_sp_dedup["popularity"] >= 50.0).astype(int)
 
-def _clean_grammys(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply documented cleaning rules to the raw Grammy data.
+    # Primary Artist Name for Dimension (with canonical casing to guarantee case-insensitive uniqueness in MySQL)
+    raw_primary = df_sp_dedup["artists"].astype(str).str.split(";").str[0].str.strip()
+    canonical_map = raw_primary.groupby(raw_primary.str.lower()).agg(lambda s: s.value_counts().index[0]).to_dict()
+    df_sp_dedup["primary_artist"] = raw_primary.str.lower().map(canonical_map)
 
-    Rules applied
-    ─────────────
-    T-GR-01 Drop rows where artist is null.
-            Justification: 1,840 rows (38%) lack an individual artist credit
-            (album/production awards). Documented source limitation.
-    T-GR-02 Normalise winner to 0/1 integer.
-    T-GR-03 Extract Grammy broad family from category name for genre mapping.
-    T-GR-04 Normalise artist name (lowercase + strip) as matching key.
-    """
-    rows_before = len(df)
-    log.info("Cleaning Grammy data. Input rows: %d", rows_before)
+    # Explicit integer conversions
+    df_sp_dedup["duration_ms"] = df_sp_dedup["duration_ms"].astype(int)
+    df_sp_dedup["popularity"] = df_sp_dedup["popularity"].astype(int)
+    df_sp_dedup["explicit"] = df_sp_dedup["explicit"].astype(int)
+    df_sp_dedup["key"] = df_sp_dedup["key"].astype(int)
+    df_sp_dedup["mode"] = df_sp_dedup["mode"].astype(int)
+    df_sp_dedup["time_signature"] = df_sp_dedup["time_signature"].astype(int)
 
-    # T-GR-01 Drop null artist
-    df = df.dropna(subset=["artist"]).copy()
-    log.info("T-GR-01 dropped null artist: %d → %d rows", rows_before, len(df))
-    print(f"[TRANSFORM] T-GR-01 Grammy null artist dropped: {rows_before} → {len(df)} rows")
+    prepared_path = work_path / "spotify_grammy_prepared.parquet"
+    df_sp_dedup.to_parquet(prepared_path, index=False)
 
-    # T-GR-02 Normalise winner
-    df["winner"] = df["winner"].map(
-        {True: 1, False: 0, "True": 1, "False": 0, 1: 1, 0: 0}
-    ).fillna(0).astype(int)
+    print("-" * 70)
+    print("TRANSFORMATION RECONCILIATION SUMMARY:")
+    print(f"  Spotify Raw Ingested:        {raw_sp_count:,}")
+    print(f"  Unidentifiable Rows Dropped: {null_rows_count}")
+    print(f"  Technical Duplicate Pairs:   {dups_before}")
+    print(f"  Prepared Analytical Rows:    {len(df_sp_dedup):,} (Target: 113,549)")
+    print(f"  Tracks with Grammy Honors:   {df_sp_dedup['has_grammy'].sum():,}")
+    print(f"  Control Group (Sin Grammy):  {(df_sp_dedup['has_grammy'] == 0).sum():,}")
+    print(f"  High Popularity Tracks:      {df_sp_dedup['is_high_popularity'].sum():,}")
+    print(f"  Output Parquet Persisted:    {prepared_path}")
+    print("-" * 70)
 
-    # T-GR-03 Grammy category family
-    category_map = {
-        "pop": "pop", "rock": "rock", "rap": "rap", "hip-hop": "rap",
-        "r&b": "r&b", "rhythm": "r&b", "country": "country",
-        "jazz": "jazz", "classical": "classical", "latin": "latin",
-        "gospel": "gospel", "electronic": "electronic", "dance": "electronic",
-        "folk": "folk", "blues": "blues", "reggae": "reggae",
-    }
+    if len(df_sp_dedup) != 113549:
+        raise ValueError(f"Deduplication integrity check failed: expected 113,549 rows, got {len(df_sp_dedup)}")
 
-    def _map_family(cat: str) -> str:
-        cat_lower = str(cat).lower()
-        for keyword, family in category_map.items():
-            if keyword in cat_lower:
-                return family
-        return "other"
-
-    df["grammy_family"] = df["category"].apply(_map_family)
-
-    # T-GR-04 Matching key
-    df["_artist_key"] = _normalise_artist(df["artist"])
-
-    log.info("Grammy cleaning complete. Output rows: %d", len(df))
-    return df
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 3 — BUILD ARTIST PROFILE & HISTORICAL COHORTS (REQ-03)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _build_grammy_artist_profile(grammy_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggregate Grammy data to one row per normalised artist key.
-    Calculates debut year and historical cohort decade for REQ-03.
-    """
-    profile = (
-        grammy_df.groupby("_artist_key", as_index=False)
-        .agg(
-            grammy_nominations=("_artist_key", "count"),
-            grammy_wins=("winner", "sum"),
-            first_grammy_year=("year", "min"),
-            last_grammy_year=("year", "max"),
-            grammy_artist_name=("artist", "first"),
-        )
-    )
-    profile["has_grammy"] = 1
-
-    # REQ-03 Historical cohort decade assignment (e.g., 1960s, 1970s, 2010s)
-    profile["first_grammy_decade"] = (
-        (profile["first_grammy_year"] // 10 * 10).astype(str) + "s"
-    )
-
-    log.info("Grammy artist profiles built: %d unique artists", len(profile))
-    print(f"[TRANSFORM] Grammy artist profiles: {len(profile)} unique artists")
-    return profile
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 4 — INTEGRATE
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _integrate(spotify_df: pd.DataFrame, grammy_profile: pd.DataFrame) -> pd.DataFrame:
-    """
-    Left-join Spotify tracks with Grammy artist profiles on normalised artist key.
-
-    Cardinality: many (tracks) to one (artist profile).
-    Unmatched Spotify tracks receive has_grammy=0 and zero Grammy counters.
-    """
-    log.info(
-        "Integrating. Spotify tracks: %d | Grammy profiles: %d",
-        len(spotify_df), len(grammy_profile),
-    )
-
-    merged = spotify_df.merge(
-        grammy_profile,
-        on="_artist_key",
-        how="left",
-        suffixes=("", "_grammy"),
-    )
-
-    # Fill unmatched rows (no Grammy record found for artist)
-    merged["has_grammy"]          = merged["has_grammy"].fillna(0).astype(int)
-    merged["grammy_nominations"]  = merged["grammy_nominations"].fillna(0).astype(int)
-    merged["grammy_wins"]         = merged["grammy_wins"].fillna(0).astype(int)
-    merged["first_grammy_year"]   = merged["first_grammy_year"].astype("Int64")
-    merged["last_grammy_year"]    = merged["last_grammy_year"].astype("Int64")
-    merged["first_grammy_decade"] = merged["first_grammy_decade"].fillna("Non-Grammy").astype("string")
-
-    matched   = (merged["has_grammy"] == 1).sum()
-    unmatched = len(merged) - matched
-
-    log.info(
-        "Integration complete. Grammy-matched tracks: %d | Unmatched: %d",
-        matched, unmatched,
-    )
-    print(f"[TRANSFORM] Integration: matched={matched} | unmatched={unmatched}")
-
-    # Reconciliation evidence
-    print(
-        f"[TRANSFORM] Reconciliation: "
-        f"spotify_in={len(spotify_df)} | integrated_out={len(merged)} | "
-        f"grammy_profiles_used={len(grammy_profile)}"
-    )
-
-    return merged
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 5 — SELECT PREPARED COLUMNS
-# ─────────────────────────────────────────────────────────────────────────────
-
-PREPARED_COLUMNS = [
-    "track_id", "track_name", "album_name", "primary_artist",
-    "track_genre", "popularity", "duration_ms", "explicit",
-    "danceability", "energy", "key", "loudness", "mode",
-    "speechiness", "acousticness", "instrumentalness",
-    "liveness", "valence", "tempo", "time_signature",
-    "has_grammy", "grammy_nominations", "grammy_wins",
-    "first_grammy_year", "first_grammy_decade", "last_grammy_year",
-]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
-
-def transform_and_integrate(spotify_raw_path: str, grammy_raw_path: str) -> str:
-    """
-    Orchestrate the full transformation and integration pipeline.
-
-    Parameters
-    ----------
-    spotify_raw_path : str   Path to spotify_raw.parquet
-    grammy_raw_path  : str   Path to grammy_raw.parquet
-
-    Returns
-    -------
-    str : Absolute path to music_prepared.parquet
-    """
-    WORK_DIR.mkdir(parents=True, exist_ok=True)
-
-    log.info("Transform & integrate started.")
-    print("[TRANSFORM] Starting transformation and integration.")
-
-    # Load raw files
-    spotify_df = pd.read_parquet(spotify_raw_path)
-    grammy_df  = pd.read_parquet(grammy_raw_path)
-
-    log.info("Loaded Spotify raw: %d rows | Grammy raw: %d rows",
-             len(spotify_df), len(grammy_df))
-
-    # Phase 1 — clean Spotify
-    spotify_clean = _clean_spotify(spotify_df)
-
-    # Phase 2 — clean Grammy
-    grammy_clean = _clean_grammys(grammy_df)
-
-    # Phase 3 — build Grammy artist profile with historical cohorts
-    grammy_profile = _build_grammy_artist_profile(grammy_clean)
-
-    # Phase 4 — integrate
-    integrated = _integrate(spotify_clean, grammy_profile)
-
-    # Phase 5 — select output columns
-    prepared = integrated[PREPARED_COLUMNS].copy()
-    prepared.to_parquet(PREPARED_PATH, index=False)
-
-    log.info(
-        "Transform & integrate complete. "
-        "Prepared rows: %d | Output: %s",
-        len(prepared), PREPARED_PATH,
-    )
-    print(f"[TRANSFORM] Done. Prepared rows={len(prepared)} | path={PREPARED_PATH}")
-
-    return str(PREPARED_PATH)
+    return str(prepared_path)

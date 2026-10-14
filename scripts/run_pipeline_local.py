@@ -1,283 +1,204 @@
 """
-run_pipeline_local.py — Automated Execution and Verification Harness.
+Direct Pipeline Execution & Reliability Testing Harness.
 
-This script executes the complete engineering pipeline and generates
-the mandatory machine-readable audit evidence (Test A, Test B, Test C)
-required by PDF §7 and §8.3.
+Mirrors the exact Airflow TaskFlow DAG topology:
+  [extract_spotify] -> [validate_spotify_raw] \
+                                                -> [transform_and_integrate] -> [validate_prepared] -> [load_dw]
+  [extract_grammys] -> [validate_grammys_raw] /
 
-It can be executed standalone in any standard Python environment without
-requiring a running Airflow scheduler:
-    python scripts/run_pipeline_local.py
-
-Stages executed:
-1. SOURCE EXTRACTION (Spotify CSV + Grammy Awards)
-2. RAW VALIDATION GATES (GX validation for Spotify & Grammy raw data)
-3. TRANSFORMATION & INTEGRATION (Clean, harmonise, left-join on primary artist)
-4. PREPARED DATA VALIDATION (GX validation of integrated analytical dataset)
-5. TEST A: Successful run verification & evidence collection
-6. TEST B: Controlled failure injection & downstream blocking assertion
-7. TEST C: Safe rerun demonstration & row-count stability verification
+Supports:
+- Test A: Full Successful Run
+- Test B: Controlled Quality Failure Injection
+- Test C: Safe Repeatability & Idempotent Rerun
 """
 
 import os
 import sys
 import json
-import logging
+import time
 from pathlib import Path
+from datetime import datetime
 import pandas as pd
+from dotenv import load_dotenv
 
-# Setup paths
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-sys.path.insert(0, str(PROJECT_ROOT))
+load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("pipeline_runner")
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
 
-WORK_DIR = PROJECT_ROOT / "data" / "work"
-OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
-EVIDENCE_DIR = PROJECT_ROOT / "docs" / "evidence"
-
-WORK_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-
-from extract import extract_spotify, SPOTIFY_RAW_PATH, GRAMMY_RAW_PATH
-from validation import run_gx_validation
-from transform import transform_and_integrate, PREPARED_PATH
+from src.extract import extract_spotify_data, extract_grammys_data
+from src.transform import transform_and_integrate
+from src.validation import run_validation
+from src.load import load_data_warehouse
+from great_expectations.expectations.metadata_types import FailureSeverity
 
 
-def run_grammy_extraction_fallback():
-    """
-    Extract Grammy data. If MySQL is reachable, queries grammy_source.
-    Otherwise, reads the prepared source CSV with full fidelity.
-    """
+def execute_pipeline(spotify_input_path: str = None, run_label: str = "Test_A"):
+    start_time = datetime.now()
+    log_file = BASE_DIR / "docs" / "evidence" / f"{run_label.lower()}_execution.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    print("=" * 80)
+    print(f"EXECUTING WORKSHOP-2 PIPELINE - RUN LABEL: {run_label}")
+    print(f"Timestamp: {start_time.isoformat()}")
+    print(f"Spotify Source Input: {spotify_input_path or 'data/spotify_dataset.csv'}")
+    print("=" * 80)
+
+    run_record = {
+        "run_id": f"run_{run_label}_{int(time.time())}",
+        "run_label": run_label,
+        "start_time": start_time.isoformat(),
+        "tasks": {}
+    }
+
     try:
-        from extract import extract_grammys
-        return extract_grammys()
-    except Exception as exc:
-        log.warning("MySQL source DB not directly reachable on host (%s).", exc)
-        log.info("Executing Grammy source extraction from prepared source CSV...")
-
-        csv_path = PROJECT_ROOT / "data" / "the_grammy_awards.csv"
-        if not csv_path.exists():
-            csv_path = PROJECT_ROOT / "the_grammy_awards.csv"
-
-        df = pd.read_csv(csv_path, low_memory=False)
-        df["winner"] = df["winner"].map(
-            {True: 1, False: 0, "True": 1, "False": 0}
-        ).fillna(0).astype(int)
-
-        insert_cols = ["year", "title", "category", "nominee", "artist", "winner"]
-        raw_df = df[[c for c in insert_cols if c in df.columns]].copy()
-        raw_df["id"] = range(1, len(raw_df) + 1)
-        raw_df["loaded_at"] = pd.Timestamp.now()
-
-        raw_df.to_parquet(GRAMMY_RAW_PATH, index=False)
-        log.info("Grammy source extracted (fallback mode): %d rows → %s", len(raw_df), GRAMMY_RAW_PATH)
-        return str(GRAMMY_RAW_PATH)
-
-
-def execute_test_a():
-    print("\n" + "="*70)
-    print("▶ EXECUTING TEST A: FULL SUCCESSFUL PIPELINE RUN")
-    print("="*70)
-
-    # 1. Extraction
-    print("\n[STAGE 1] Extracting Sources...")
-    sp_raw_path = extract_spotify()
-    gr_raw_path = run_grammy_extraction_fallback()
-
-    sp_raw_df = pd.read_parquet(sp_raw_path)
-    gr_raw_df = pd.read_parquet(gr_raw_path)
-    print(f"  ✓ Spotify raw extracted: {len(sp_raw_df)} rows")
-    print(f"  ✓ Grammy raw extracted:  {len(gr_raw_df)} rows")
-
-    # 2. Raw Validation Gates
-    print("\n[STAGE 2] Running Raw Data Validation Gates (Great Expectations)...")
-    sp_res, sp_max_fail = run_gx_validation(sp_raw_df, stage="spotify_raw")
-    print(f"  ✓ Spotify raw gate: success={sp_res.success} | max_failure={sp_max_fail}")
-    assert sp_max_fail != "critical", "Spotify raw validation unexpectedly failed with CRITICAL!"
-
-    gr_res, gr_max_fail = run_gx_validation(gr_raw_df, stage="grammy_raw")
-    print(f"  ✓ Grammy raw gate:  success={gr_res.success} | max_failure={gr_max_fail}")
-    assert gr_max_fail != "critical", "Grammy raw validation unexpectedly failed with CRITICAL!"
-
-    # 3. Transform & Integrate
-    print("\n[STAGE 3] Executing Transformation & Cross-Source Integration...")
-    prep_path = transform_and_integrate(sp_raw_path, gr_raw_path)
-    prep_df = pd.read_parquet(prep_path)
-    print(f"  ✓ Prepared dataset created: {len(prep_df)} rows (Grain: Track x Genre)")
-
-    # 4. Prepared Validation Gate
-    print("\n[STAGE 4] Running Prepared Data Validation Gate (Great Expectations)...")
-    prep_res, prep_max_fail = run_gx_validation(prep_df, stage="prepared")
-    print(f"  ✓ Prepared gate:    success={prep_res.success} | max_failure={prep_max_fail}")
-    assert prep_max_fail is None or prep_max_fail != "critical", "Prepared data validation failed with CRITICAL!"
-
-    # 5. Load to DW (or local verification)
-    print("\n[STAGE 5] Data Warehouse Loading / Reconciliation...")
-    try:
-        from load import load_to_dw
-        summary = load_to_dw(prep_path)
-        print(f"  ✓ Loaded into MySQL DW: {summary}")
-    except Exception as exc:
-        log.warning("MySQL DW not reachable on localhost port 3307 (%s).", exc)
-        log.info("Generating verified DW load summary from prepared dataset...")
-
-        genre_count = prep_df["track_genre"].nunique()
-        artist_count = prep_df["primary_artist"].nunique()
-        fact_count = len(prep_df)
-
-        summary = {
-            "dim_genre_rows": genre_count,
-            "dim_artist_rows": artist_count,
-            "fact_track_rows": fact_count,
-            "source_rows": len(prep_df),
-            "status": "LOAD_VERIFIED_CORRECT",
+        # Task 1A: extract_spotify
+        t0 = time.time()
+        print("\n--- TASK: extract_spotify ---")
+        raw_sp_path = extract_spotify_data(source_path=spotify_input_path)
+        run_record["tasks"]["extract_spotify"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "output": raw_sp_path
         }
-        with open(OUTPUT_DIR / "load_summary.json", "w", encoding="utf-8") as fh:
-            json.dump(summary, fh, indent=2)
-        with open(EVIDENCE_DIR / "load_summary.json", "w", encoding="utf-8") as fh:
-            json.dump(summary, fh, indent=2)
-        print(f"  ✓ Verified DW load summary: {summary}")
 
-    # Generate Test A Summary Evidence
-    test_a_evidence = {
-        "test_id": "TEST_A_SUCCESSFUL_RUN",
-        "description": "Full end-to-end execution of the reliable music pipeline with compliant batch.",
-        "results": {
-            "spotify_raw_rows": len(sp_raw_df),
-            "grammy_raw_rows": len(gr_raw_df),
-            "spotify_raw_validation": {"success": sp_res.success, "max_failure": str(sp_max_fail)},
-            "grammy_raw_validation": {"success": gr_res.success, "max_failure": str(gr_max_fail)},
-            "prepared_rows": len(prep_df),
-            "prepared_validation": {"success": prep_res.success, "max_failure": str(prep_max_fail)},
-            "dw_load_summary": summary,
-        },
-        "status": "PASSED"
-    }
-    with open(EVIDENCE_DIR / "test_a_successful_run_evidence.json", "w", encoding="utf-8") as fh:
-        json.dump(test_a_evidence, fh, indent=2)
-    print("  ✓ Test A evidence persisted → docs/evidence/test_a_successful_run_evidence.json")
-    return prep_df, summary
+        # Task 1B: extract_grammys
+        t0 = time.time()
+        print("\n--- TASK: extract_grammys ---")
+        raw_gr_path = extract_grammys_data()
+        run_record["tasks"]["extract_grammys"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "output": raw_gr_path
+        }
 
+        # Task 2A: validate_spotify_raw
+        t0 = time.time()
+        print("\n--- TASK: validate_spotify_raw ---")
+        df_sp = pd.read_parquet(raw_sp_path)
+        res_sp, max_f_sp, sum_sp = run_validation(
+            dataframe=df_sp,
+            stage="spotify_raw",
+            context_mode="file",
+            output_prefix=run_label.lower()
+        )
 
-def execute_test_b():
-    print("\n" + "="*70)
-    print("▶ EXECUTING TEST B: CONTROLLED CRITICAL FAILURE & BLOCKING")
-    print("="*70)
+        if max_f_sp == FailureSeverity.CRITICAL:
+            run_record["tasks"]["validate_spotify_raw"] = {
+                "state": "FAILED",
+                "duration_sec": round(time.time() - t0, 2),
+                "error": "Critical GX validation failure",
+                "max_severity": str(max_f_sp)
+            }
+            raise ValueError(f"[CIRCUIT BREAKER] Spotify raw validation failed with CRITICAL severity. Blocking downstream tasks.")
+        
+        run_record["tasks"]["validate_spotify_raw"] = {
+            "state": "SUCCESS" if res_sp.success else "WARNING_CONTINUED",
+            "duration_sec": round(time.time() - t0, 2),
+            "max_severity": str(max_f_sp) if max_f_sp else "NONE"
+        }
 
-    # 1. Create corrupted batch with popularity = 150
-    from scripts.create_bad_data import create_bad_data, BAD_CSV_ROOT
-    create_bad_data()
+        # Task 2B: validate_grammys_raw
+        t0 = time.time()
+        print("\n--- TASK: validate_grammys_raw ---")
+        df_gr = pd.read_parquet(raw_gr_path)
+        res_gr, max_f_gr, sum_gr = run_validation(
+            dataframe=df_gr,
+            stage="grammys_raw",
+            context_mode="file",
+            output_prefix=run_label.lower()
+        )
 
-    print("\n[TEST B] Reading corrupted batch...")
-    bad_df = pd.read_csv(BAD_CSV_ROOT, low_memory=False)
-    print(f"  Row 0 popularity: {bad_df.loc[bad_df.index[0], 'popularity']} (violates DQ-SP-02 [0, 100])")
+        if max_f_gr == FailureSeverity.CRITICAL:
+            run_record["tasks"]["validate_grammys_raw"] = {
+                "state": "FAILED",
+                "duration_sec": round(time.time() - t0, 2),
+                "error": "Critical GX validation failure"
+            }
+            raise ValueError(f"[CIRCUIT BREAKER] Grammy raw validation failed with CRITICAL severity. Blocking downstream tasks.")
 
-    # 2. Run raw validation
-    print("\n[TEST B] Running Spotify Raw Validation on corrupted batch...")
-    from great_expectations.expectations.metadata_types import FailureSeverity
-    res, max_fail = run_gx_validation(bad_df, stage="spotify_raw")
+        run_record["tasks"]["validate_grammys_raw"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "max_severity": str(max_f_gr) if max_f_gr else "NONE"
+        }
 
-    print(f"  Validation success: {res.success}")
-    print(f"  Max failure severity: {max_fail}")
+        # Task 3: transform_and_integrate
+        t0 = time.time()
+        print("\n--- TASK: transform_and_integrate ---")
+        prepared_path = transform_and_integrate(raw_sp_path, raw_gr_path)
+        run_record["tasks"]["transform_and_integrate"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "output": prepared_path
+        }
 
-    # Save Test B raw validation failure output
-    with open(EVIDENCE_DIR / "test_b_failed_raw_validation.json", "w", encoding="utf-8") as fh:
-        json.dump(res.to_json_dict(), fh, indent=2, default=str)
+        # Task 4: validate_prepared
+        t0 = time.time()
+        print("\n--- TASK: validate_prepared ---")
+        df_prep = pd.read_parquet(prepared_path)
+        res_prep, max_f_prep, sum_prep = run_validation(
+            dataframe=df_prep,
+            stage="prepared",
+            context_mode="file",
+            output_prefix=run_label.lower()
+        )
 
-    # 3. Assert downstream blocking behavior
-    is_critical = (max_fail == FailureSeverity.CRITICAL or str(max_fail).lower() == "critical")
-    print(f"  ✓ Critical severity detected: {is_critical}")
+        if max_f_prep == FailureSeverity.CRITICAL:
+            run_record["tasks"]["validate_prepared"] = {
+                "state": "FAILED",
+                "duration_sec": round(time.time() - t0, 2),
+                "error": "Critical GX prepared validation failure"
+            }
+            raise ValueError("[CIRCUIT BREAKER] Prepared validation failed with CRITICAL severity. Blocking DW load.")
 
-    if is_critical:
-        print("  ✓ Airflow Task Simulation: validate_spotify_raw raises ValueError.")
-        print("  ✓ Downstream tasks (transform_and_integrate, validate_prepared, load_dw) are PREVENTED from executing.")
-        test_b_status = "PASSED"
-    else:
-        print("  ✗ Test B failed: Critical failure not properly flagged!")
-        test_b_status = "FAILED"
+        run_record["tasks"]["validate_prepared"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "max_severity": str(max_f_prep) if max_f_prep else "NONE"
+        }
 
-    test_b_evidence = {
-        "test_id": "TEST_B_CONTROLLED_FAILURE",
-        "description": "Deterministic injection of popularity=150 to violate Rule DQ-SP-02.",
-        "injected_violation": {
-            "column": "popularity",
-            "injected_value": 150,
-            "rule_violated": "DQ-SP-02 (ExpectColumnValuesToBeBetween 0 to 100)",
-            "expected_severity": "CRITICAL"
-        },
-        "validation_outcome": {
-            "success": res.success,
-            "max_failure_severity": str(max_fail),
-            "downstream_blocked": is_critical
-        },
-        "airflow_behavior": {
-            "task_state": "FAILED",
-            "downstream_tasks_state": "UPSTREAM_FAILED / SKIPPED"
-        },
-        "status": test_b_status
-    }
-    with open(EVIDENCE_DIR / "test_b_controlled_failure_evidence.json", "w", encoding="utf-8") as fh:
-        json.dump(test_b_evidence, fh, indent=2)
-    print("  ✓ Test B evidence persisted → docs/evidence/test_b_controlled_failure_evidence.json")
+        # Task 5: load_dw
+        t0 = time.time()
+        print("\n--- TASK: load_dw ---")
+        load_summary = load_data_warehouse(prepared_path)
+        run_record["tasks"]["load_dw"] = {
+            "state": "SUCCESS",
+            "duration_sec": round(time.time() - t0, 2),
+            "summary": load_summary
+        }
 
+        run_record["final_state"] = "SUCCESS"
+        print(f"\n[PIPELINE COMPLETE] Overall Status: SUCCESS in {round(time.time() - start_time.timestamp(), 2)}s")
 
-def execute_test_c(initial_summary):
-    print("\n" + "="*70)
-    print("▶ EXECUTING TEST C: SAFE RERUN & IDEMPOTENCY DEMONSTRATION")
-    print("="*70)
+    except Exception as exc:
+        run_record["final_state"] = "FAILED"
+        run_record["error_message"] = str(exc)
+        print(f"\n[PIPELINE HALTED] Circuit breaker triggered: {exc}")
 
-    print("\n[TEST C] Executing pipeline a second time using the exact same input batch...")
-    # Re-run extraction and transform
-    sp_raw_path = extract_spotify()
-    gr_raw_path = run_grammy_extraction_fallback()
-    prep_path = transform_and_integrate(sp_raw_path, gr_raw_path)
-    rerun_prep_df = pd.read_parquet(prep_path)
+        # Mark unreached downstream tasks as BLOCKED/SKIPPED
+        all_tasks = ["extract_spotify", "extract_grammys", "validate_spotify_raw", "validate_grammys_raw", "transform_and_integrate", "validate_prepared", "load_dw"]
+        for t in all_tasks:
+            if t not in run_record["tasks"]:
+                run_record["tasks"][t] = {"state": "BLOCKED_UPSTREAM_FAILED"}
 
-    # Verify prepared row count stability
-    initial_rows = initial_summary["source_rows"]
-    rerun_rows = len(rerun_prep_df)
+    end_time = datetime.now()
+    run_record["end_time"] = end_time.isoformat()
+    run_record["total_elapsed_sec"] = round((end_time - start_time).total_seconds(), 2)
 
-    # In MySQL, DELETE FROM dim and fact before insert ensures identical counts
-    test_c_evidence = {
-        "test_id": "TEST_C_SAFE_RERUN",
-        "strategy": "Atomic DELETE + INSERT (replaces existing batch cleanly)",
-        "run_1_metrics": {
-            "fact_track_rows": initial_summary["fact_track_rows"],
-            "dim_genre_rows": initial_summary["dim_genre_rows"],
-            "dim_artist_rows": initial_summary["dim_artist_rows"],
-        },
-        "run_2_metrics": {
-            "fact_track_rows": initial_summary["fact_track_rows"],
-            "dim_genre_rows": initial_summary["dim_genre_rows"],
-            "dim_artist_rows": initial_summary["dim_artist_rows"],
-        },
-        "comparison": {
-            "duplicate_effect_detected": False,
-            "row_count_delta": 0,
-            "idempotency_verified": True
-        },
-        "recovery_behavior": (
-            "If a rerun fails mid-way, atomic DELETE inside engine.begin() rolls back, "
-            "preventing silent duplicate accumulation or partial loads."
-        ),
-        "status": "PASSED"
-    }
+    evidence_json = BASE_DIR / "docs" / "evidence" / f"{run_label.lower()}_run_manifest.json"
+    with open(evidence_json, "w", encoding="utf-8") as f:
+        json.dump(run_record, f, indent=4)
 
-    with open(EVIDENCE_DIR / "test_c_safe_rerun_evidence.json", "w", encoding="utf-8") as fh:
-        json.dump(test_c_evidence, fh, indent=2)
-    print("  ✓ Safe rerun verified: Zero duplicates. Initial rows = Rerun rows.")
-    print("  ✓ Test C evidence persisted → docs/evidence/test_c_safe_rerun_evidence.json")
+    print(f"Run manifest saved to: {evidence_json}")
+    return run_record
 
 
 if __name__ == "__main__":
-    print("STARTING COMPLETE VERIFIED PIPELINE HARNESS...\n")
-    prep_df, summary = execute_test_a()
-    execute_test_b()
-    execute_test_c(summary)
-    print("\n" + "="*70)
-    print("✔ ALL 3 TESTS (A, B, C) COMPLETED & AUDIT EVIDENCE GENERATED")
-    print("="*70)
+    mode = sys.argv[1] if len(sys.argv) > 1 else "A"
+    if mode == "A":
+        execute_pipeline(run_label="Test_A")
+    elif mode == "B":
+        execute_pipeline(spotify_input_path=str(BASE_DIR / "data" / "spotify_dataset_bad.csv"), run_label="Test_B")
+    elif mode == "C":
+        execute_pipeline(run_label="Test_C")

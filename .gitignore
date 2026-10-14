@@ -1,51 +1,43 @@
-# ── Environment & secrets ─────────────────────────────────────────────────────
+# Environment and secrets
 .env
 *.env.local
 
-# ── Airflow ───────────────────────────────────────────────────────────────────
-logs/
-config/airflow.cfg
-config/webserver_config.py
-plugins/
-
-# ── Python ────────────────────────────────────────────────────────────────────
+# Python cache
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
+*.so
 .Python
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
+env/
+venv/
+.venv/
 
-# ── Jupyter ───────────────────────────────────────────────────────────────────
-.ipynb_checkpoints/
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
 
-# ── Temporary pipeline work data ──────────────────────────────────────────────
+# Airflow runtime and logs
+logs/
+airflow.db
+airflow.cfg
+webserver_config.py
+*.pid
+
+# Intermediate pipeline data and working directories
 data/work/
 data/output/
-*_bad.csv
-data/*_bad.csv
+*.parquet
 
-# Root duplicate CSVs (canonical versions are in data/)
-/spotify_dataset.csv
-/the_grammy_awards.csv
-
-# ── Great Expectations generated outputs ─────────────────────────────────────
+# Great Expectations uncommitted
 gx/uncommitted/
 
-# ── OS ────────────────────────────────────────────────────────────────────────
+# OS specific
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# ── IDEs ──────────────────────────────────────────────────────────────────────
-.venv/
-venv/
-.idea/
-.vscode/
-*.swp
-
-# Reference in-class practice file
+# Root raw duplicates and generated test datasets
+/spotify_dataset.csv
+/the_grammy_awards.csv
 reliable_pipeline.py
+data/*_bad.csv
+

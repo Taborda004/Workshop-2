@@ -1,0 +1,44 @@
+[
+    {
+        "Dataset \/ Attribute":"Spotify: track_id, track_genre",
+        "Profiling Evidence":"450 exact duplicate rows across all content attributes; track_id repeats legally across genres.",
+        "Potential Quality Risk":"Distorted aggregation counts and duplicate fact records in DW.",
+        "Related Requirement":"REQ-01, REQ-02, REQ-03"
+    },
+    {
+        "Dataset \/ Attribute":"Spotify: popularity",
+        "Profiling Evidence":"Empirical range [0, 100], P75 exactly 50.0. 15,843 zero-popularity records.",
+        "Potential Quality Risk":"Out-of-range values (>100 or <0) corrupt lift calculations and P75 metric.",
+        "Related Requirement":"REQ-01, REQ-03"
+    },
+    {
+        "Dataset \/ Attribute":"Spotify: artists, track_name",
+        "Profiling Evidence":"1 row (index 65900) has null artists, album_name, and track_name.",
+        "Potential Quality Risk":"Null foreign keys in star schema; broken artist integration.",
+        "Related Requirement":"REQ-01, REQ-02, REQ-03"
+    },
+    {
+        "Dataset \/ Attribute":"Spotify: 9 Audio Features",
+        "Profiling Evidence":"danceability, energy, speechiness, etc., strictly bounded in [0.0, 1.0]; loudness in [-60, 0].",
+        "Potential Quality Risk":"Abnormal acoustical readings distort acoustic DNA radar profiling.",
+        "Related Requirement":"REQ-02"
+    },
+    {
+        "Dataset \/ Attribute":"Grammy: artist, category",
+        "Profiling Evidence":"1,840 records with null artist; Best New Artist stores artist in nominee.",
+        "Potential Quality Risk":"Omission of recognized artists during cross-source matching.",
+        "Related Requirement":"REQ-01, REQ-02, REQ-03"
+    },
+    {
+        "Dataset \/ Attribute":"Grammy: year",
+        "Profiling Evidence":"Range 1958 to 2019; all values parseable integers.",
+        "Potential Quality Risk":"Invalid or missing years would invalidate decade cohort derivation.",
+        "Related Requirement":"REQ-03"
+    },
+    {
+        "Dataset \/ Attribute":"Integration: artists matching",
+        "Profiling Evidence":"Case differences, leading\/trailing spaces, and multi-artist semicolon lists.",
+        "Potential Quality Risk":"False negatives in Grammy recognition matching.",
+        "Related Requirement":"REQ-01, REQ-02, REQ-03"
+    }
+]

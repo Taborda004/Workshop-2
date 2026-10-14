@@ -1,479 +1,142 @@
 {
-  "success": false,
-  "results": [
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_not_be_null",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "track_id"
-        },
-        "meta": {},
-        "id": "149f1116-a53e-403d-9ac4-9ae525733cc4",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 0,
-        "unexpected_percent": 0.0,
-        "partial_unexpected_list": [],
-        "partial_unexpected_counts": [],
-        "partial_unexpected_index_list": []
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": false,
-      "expectation_config": {
-        "type": "expect_column_values_to_be_unique",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "track_id"
-        },
-        "meta": {},
-        "id": "ee2498fc-ceca-46e0-8225-aa098b85cbcd",
-        "severity": "warning"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 40900,
-        "unexpected_percent": 35.877192982456144,
-        "partial_unexpected_list": [
-          "5SuOikwiRyPMVoIQDJUgSV",
-          "4qPNDBW1i3p13qLCt0Ki3A",
-          "01MVOl9KtVTNfFiBU9I7dc",
-          "6Vc5wAMmXdKIAM7WUoEb7N",
-          "1EzrEOXmMH3G43AXT1y7pA",
-          "7k9GuJYLp2AzqokyEdwEw2",
-          "4ptDJbJl35d7gQfeNteBwp",
-          "0X9MxHR1rTkEHDjp95F2OO",
-          "6xKeQgzfjixSUld14qUezm",
-          "4Yo0igmcoNyat1secaH0OD",
-          "5TvE3pk05pyFIGdSY9j4DJ",
-          "0BUuuEvNa5T4lMaewyiudB",
-          "3Hn3LfhrQOaKihdCibJsTs",
-          "6D33wCKzWtNEgOovgeVJ7r",
-          "5IfCZDRXZrqZSm8AwE44PG",
-          "0dzKBptH2P5j5a0MifBMwM",
-          "5QAMZTM5cmLg3fHX9ZbTZi",
-          "2qESE1ZeWly7I3YjyTXmXh",
-          "3EQV1ZHtHvq9OnVRYIdbg3",
-          "3ax0rfGb7exLtl02LL08U9"
-        ],
-        "missing_count": 0,
-        "missing_percent": 0.0,
-        "unexpected_percent_total": 35.877192982456144,
-        "unexpected_percent_nonmissing": 35.877192982456144,
-        "partial_unexpected_counts": [
-          {
-            "value": "01MVOl9KtVTNfFiBU9I7dc",
-            "count": 1
-          },
-          {
-            "value": "0BUuuEvNa5T4lMaewyiudB",
-            "count": 1
-          },
-          {
-            "value": "0X9MxHR1rTkEHDjp95F2OO",
-            "count": 1
-          },
-          {
-            "value": "0dzKBptH2P5j5a0MifBMwM",
-            "count": 1
-          },
-          {
-            "value": "1EzrEOXmMH3G43AXT1y7pA",
-            "count": 1
-          },
-          {
-            "value": "2qESE1ZeWly7I3YjyTXmXh",
-            "count": 1
-          },
-          {
-            "value": "3EQV1ZHtHvq9OnVRYIdbg3",
-            "count": 1
-          },
-          {
-            "value": "3Hn3LfhrQOaKihdCibJsTs",
-            "count": 1
-          },
-          {
-            "value": "3ax0rfGb7exLtl02LL08U9",
-            "count": 1
-          },
-          {
-            "value": "4Yo0igmcoNyat1secaH0OD",
-            "count": 1
-          },
-          {
-            "value": "4ptDJbJl35d7gQfeNteBwp",
-            "count": 1
-          },
-          {
-            "value": "4qPNDBW1i3p13qLCt0Ki3A",
-            "count": 1
-          },
-          {
-            "value": "5IfCZDRXZrqZSm8AwE44PG",
-            "count": 1
-          },
-          {
-            "value": "5QAMZTM5cmLg3fHX9ZbTZi",
-            "count": 1
-          },
-          {
-            "value": "5SuOikwiRyPMVoIQDJUgSV",
-            "count": 1
-          },
-          {
-            "value": "5TvE3pk05pyFIGdSY9j4DJ",
-            "count": 1
-          },
-          {
-            "value": "6D33wCKzWtNEgOovgeVJ7r",
-            "count": 1
-          },
-          {
-            "value": "6Vc5wAMmXdKIAM7WUoEb7N",
-            "count": 1
-          },
-          {
-            "value": "6xKeQgzfjixSUld14qUezm",
-            "count": 1
-          },
-          {
-            "value": "7k9GuJYLp2AzqokyEdwEw2",
-            "count": 1
-          }
-        ],
-        "partial_unexpected_index_list": [
-          0,
-          1,
-          5,
-          6,
-          7,
-          9,
-          12,
-          13,
-          16,
-          17,
-          22,
-          23,
-          24,
-          25,
-          26,
-          27,
-          28,
-          29,
-          30,
-          31
-        ]
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": false,
-      "expectation_config": {
-        "type": "expect_column_values_to_be_between",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "popularity",
-          "min_value": 0.0,
-          "max_value": 100.0
-        },
-        "meta": {},
-        "id": "0dcc4036-2c96-4ebb-aa1f-fd505706ddd0",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 1,
-        "unexpected_percent": 0.0008771929824561403,
-        "partial_unexpected_list": [
-          150
-        ],
-        "missing_count": 0,
-        "missing_percent": 0.0,
-        "unexpected_percent_total": 0.0008771929824561403,
-        "unexpected_percent_nonmissing": 0.0008771929824561403,
-        "partial_unexpected_counts": [
-          {
-            "value": 150,
-            "count": 1
-          }
-        ],
-        "partial_unexpected_index_list": [
-          0
-        ]
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_not_be_null",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "artists",
-          "mostly": 0.99
-        },
-        "meta": {},
-        "id": "a832f188-c6b5-4970-a7f9-2a8120f9bc41",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 1,
-        "unexpected_percent": 0.0008771929824561403,
-        "partial_unexpected_list": [
-          null
-        ],
-        "partial_unexpected_counts": [
-          {
-            "value": null,
-            "count": 1
-          }
-        ],
-        "partial_unexpected_index_list": [
-          65900
-        ]
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_not_be_null",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "track_genre"
-        },
-        "meta": {},
-        "id": "95fbbb97-a3d7-488b-8022-15d8c0740c13",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 0,
-        "unexpected_percent": 0.0,
-        "partial_unexpected_list": [],
-        "partial_unexpected_counts": [],
-        "partial_unexpected_index_list": []
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_be_between",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "danceability",
-          "min_value": 0.0,
-          "max_value": 1.0
-        },
-        "meta": {},
-        "id": "6a28f97d-ff4d-45a1-8e8d-e282c00bf60e",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 0,
-        "unexpected_percent": 0.0,
-        "partial_unexpected_list": [],
-        "missing_count": 0,
-        "missing_percent": 0.0,
-        "unexpected_percent_total": 0.0,
-        "unexpected_percent_nonmissing": 0.0,
-        "partial_unexpected_counts": [],
-        "partial_unexpected_index_list": []
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_be_between",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "energy",
-          "min_value": 0.0,
-          "max_value": 1.0
-        },
-        "meta": {},
-        "id": "35693aae-da1b-4ce5-aee9-bd89c6953b11",
-        "severity": "critical"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 0,
-        "unexpected_percent": 0.0,
-        "partial_unexpected_list": [],
-        "missing_count": 0,
-        "missing_percent": 0.0,
-        "unexpected_percent_total": 0.0,
-        "unexpected_percent_nonmissing": 0.0,
-        "partial_unexpected_counts": [],
-        "partial_unexpected_index_list": []
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": true,
-      "expectation_config": {
-        "type": "expect_column_values_to_not_be_null",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "album_name",
-          "mostly": 0.99
-        },
-        "meta": {},
-        "id": "467a8149-7faf-4bc4-a3a0-bc8774b217cb",
-        "severity": "warning"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 1,
-        "unexpected_percent": 0.0008771929824561403,
-        "partial_unexpected_list": [
-          null
-        ],
-        "partial_unexpected_counts": [
-          {
-            "value": null,
-            "count": 1
-          }
-        ],
-        "partial_unexpected_index_list": [
-          65900
-        ]
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    },
-    {
-      "success": false,
-      "expectation_config": {
-        "type": "expect_column_values_to_be_between",
-        "kwargs": {
-          "batch_id": "spotify_raw_source-spotify_raw_asset",
-          "column": "duration_ms",
-          "min_value": 10000.0
-        },
-        "meta": {},
-        "id": "a320b0e3-5ee9-48e6-a9e4-41fb42d6ed4a",
-        "severity": "warning"
-      },
-      "result": {
-        "element_count": 114000,
-        "unexpected_count": 2,
-        "unexpected_percent": 0.0017543859649122805,
-        "partial_unexpected_list": [
-          8586,
-          0
-        ],
-        "missing_count": 0,
-        "missing_percent": 0.0,
-        "unexpected_percent_total": 0.0017543859649122805,
-        "unexpected_percent_nonmissing": 0.0017543859649122805,
-        "partial_unexpected_counts": [
-          {
-            "value": 0,
-            "count": 1
-          },
-          {
-            "value": 8586,
-            "count": 1
-          }
-        ],
-        "partial_unexpected_index_list": [
-          59310,
-          65900
-        ]
-      },
-      "meta": {},
-      "exception_info": {
-        "raised_exception": false,
-        "exception_traceback": null,
-        "exception_message": null
-      }
-    }
-  ],
-  "suite_name": "spotify_raw_suite",
-  "suite_parameters": {},
-  "statistics": {
-    "evaluated_expectations": 9,
+    "stage": "spotify_raw",
+    "timestamp": "2026-10-14T01:43:47.422449",
+    "total_rows_evaluated": 114000,
+    "overall_success": false,
+    "max_failure_severity": "FailureSeverity.WARNING",
+    "evaluated_expectations": 7,
     "successful_expectations": 6,
-    "unsuccessful_expectations": 3,
-    "success_percent": 66.66666666666666
-  },
-  "meta": {
-    "great_expectations_version": "1.24.0",
-    "batch_spec": {
-      "batch_data": "PandasDataFrame"
-    },
-    "batch_markers": {
-      "ge_load_time": "20261014T052721.361011Z",
-      "pandas_data_fingerprint": "ca6b5bb78d71f427a22fd8a6568b7245"
-    },
-    "active_batch_definition": {
-      "datasource_name": "spotify_raw_source",
-      "data_connector_name": "fluent",
-      "data_asset_name": "spotify_raw_asset",
-      "batch_identifiers": {
-        "dataframe": "<DATAFRAME>"
-      }
-    },
-    "validation_id": "7956bd38-b5a1-4bcc-92d0-a70ae56b8661",
-    "checkpoint_id": null,
-    "run_id": {
-      "run_name": null,
-      "run_time": "2026-10-14T00:27:22.033123-05:00"
-    },
-    "validation_time": "2026-10-14T05:27:22.033123+00:00",
-    "batch_parameters": {
-      "dataframe": "<DATAFRAME>"
-    }
-  },
-  "id": null
+    "unsuccessful_expectations": 1,
+    "success_percent": 85.71428571428571,
+    "expectation_results": [
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "popularity",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "track_id",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "artists",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 1,
+                "unexpected_percent": 0.0008771929824561403,
+                "partial_unexpected_list": [
+                    null
+                ],
+                "partial_unexpected_counts": [
+                    {
+                        "value": null,
+                        "count": 1
+                    }
+                ],
+                "partial_unexpected_index_list": [
+                    65900
+                ]
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "danceability",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "energy",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "valence",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "duration_ms",
+            "success": false,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 1,
+                "unexpected_percent": 0.0008771929824561403,
+                "partial_unexpected_list": [
+                    0
+                ],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0008771929824561403,
+                "unexpected_percent_nonmissing": 0.0008771929824561403,
+                "partial_unexpected_counts": [
+                    {
+                        "value": 0,
+                        "count": 1
+                    }
+                ],
+                "partial_unexpected_index_list": [
+                    65900
+                ]
+            }
+        }
+    ]
 }

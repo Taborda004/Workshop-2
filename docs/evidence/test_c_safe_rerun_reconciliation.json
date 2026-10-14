@@ -1,0 +1,77 @@
+{
+    "test": "Test_C_Repeatability_and_Safe_Rerun",
+    "timestamp": "2026-10-14T01:51:52.922153",
+    "status": "SUCCESS",
+    "idempotency_strategy": "Atomic transaction via engine.begin() with reverse-referential DELETE FROM.",
+    "before_snapshot": {
+        "fact_rows": 113549,
+        "dim_artist_rows": 17639,
+        "dim_genre_rows": 114,
+        "dim_date_rows": 82,
+        "popularity_sum": 3783956,
+        "popularity_avg": 33.3244,
+        "high_popularity_count": 29344,
+        "grammy_fact_count": 9987
+    },
+    "after_snapshot": {
+        "fact_rows": 113549,
+        "dim_artist_rows": 17639,
+        "dim_genre_rows": 114,
+        "dim_date_rows": 82,
+        "popularity_sum": 3783956,
+        "popularity_avg": 33.3244,
+        "high_popularity_count": 29344,
+        "grammy_fact_count": 9987
+    },
+    "discrepancies": {
+        "fact_rows": {
+            "before": 113549,
+            "after": 113549,
+            "difference": 0,
+            "passed": true
+        },
+        "dim_artist_rows": {
+            "before": 17639,
+            "after": 17639,
+            "difference": 0,
+            "passed": true
+        },
+        "dim_genre_rows": {
+            "before": 114,
+            "after": 114,
+            "difference": 0,
+            "passed": true
+        },
+        "dim_date_rows": {
+            "before": 82,
+            "after": 82,
+            "difference": 0,
+            "passed": true
+        },
+        "popularity_sum": {
+            "before": 3783956,
+            "after": 3783956,
+            "difference": 0,
+            "passed": true
+        },
+        "popularity_avg": {
+            "before": 33.3244,
+            "after": 33.3244,
+            "difference": 0.0,
+            "passed": true
+        },
+        "high_popularity_count": {
+            "before": 29344,
+            "after": 29344,
+            "difference": 0,
+            "passed": true
+        },
+        "grammy_fact_count": {
+            "before": 9987,
+            "after": 9987,
+            "difference": 0,
+            "passed": true
+        }
+    },
+    "zero_duplicate_effects_verified": true
+}

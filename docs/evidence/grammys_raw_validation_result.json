@@ -1,0 +1,60 @@
+{
+    "stage": "grammys_raw",
+    "timestamp": "2026-10-14T01:43:47.685104",
+    "total_rows_evaluated": 4810,
+    "overall_success": true,
+    "max_failure_severity": "NONE",
+    "evaluated_expectations": 3,
+    "successful_expectations": 3,
+    "unsuccessful_expectations": 0,
+    "success_percent": 100.0,
+    "expectation_results": [
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "year",
+            "success": true,
+            "details": {
+                "element_count": 4810,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_in_set",
+            "column": "winner",
+            "success": true,
+            "details": {
+                "element_count": 4810,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "category",
+            "success": true,
+            "details": {
+                "element_count": 4810,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        }
+    ]
+}

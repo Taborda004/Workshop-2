@@ -1,0 +1,58 @@
+{
+    "run_id": "run_Test_C_1791960677",
+    "run_label": "Test_C",
+    "start_time": "2026-10-14T01:51:17.957455",
+    "tasks": {
+        "extract_spotify": {
+            "state": "SUCCESS",
+            "duration_sec": 0.65,
+            "output": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\work\\spotify_raw.parquet"
+        },
+        "extract_grammys": {
+            "state": "SUCCESS",
+            "duration_sec": 0.1,
+            "output": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\work\\grammys_raw.parquet"
+        },
+        "validate_spotify_raw": {
+            "state": "WARNING_CONTINUED",
+            "duration_sec": 0.77,
+            "max_severity": "FailureSeverity.WARNING"
+        },
+        "validate_grammys_raw": {
+            "state": "SUCCESS",
+            "duration_sec": 0.21,
+            "max_severity": "NONE"
+        },
+        "transform_and_integrate": {
+            "state": "SUCCESS",
+            "duration_sec": 3.52,
+            "output": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\work\\spotify_grammy_prepared.parquet"
+        },
+        "validate_prepared": {
+            "state": "SUCCESS",
+            "duration_sec": 0.77,
+            "max_severity": "NONE"
+        },
+        "load_dw": {
+            "state": "SUCCESS",
+            "duration_sec": 28.73,
+            "summary": {
+                "step": "load_data_warehouse",
+                "timestamp": "2026-10-14T01:51:52.715137",
+                "status": "SUCCESS",
+                "database": "spotify_grammy_dw",
+                "tables": {
+                    "fact_track_performance": 113549,
+                    "dim_artist": 17639,
+                    "dim_genre": 114,
+                    "dim_date": 82
+                },
+                "safe_rerun_strategy": "Atomic transaction with engine.begin() and reverse-referential DELETE FROM.",
+                "reconciliation_passed": true
+            }
+        }
+    },
+    "final_state": "SUCCESS",
+    "end_time": "2026-10-14T01:51:52.717436",
+    "total_elapsed_sec": 34.76
+}

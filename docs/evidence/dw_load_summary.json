@@ -1,0 +1,14 @@
+{
+    "step": "load_data_warehouse",
+    "timestamp": "2026-10-14T01:51:52.715137",
+    "status": "SUCCESS",
+    "database": "spotify_grammy_dw",
+    "tables": {
+        "fact_track_performance": 113549,
+        "dim_artist": 17639,
+        "dim_genre": 114,
+        "dim_date": 82
+    },
+    "safe_rerun_strategy": "Atomic transaction with engine.begin() and reverse-referential DELETE FROM.",
+    "reconciliation_passed": true
+}

@@ -1,0 +1,39 @@
+{
+    "run_id": "run_Test_B_1791960626",
+    "run_label": "Test_B",
+    "start_time": "2026-10-14T01:50:26.225628",
+    "tasks": {
+        "extract_spotify": {
+            "state": "SUCCESS",
+            "duration_sec": 0.67,
+            "output": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\work\\spotify_raw.parquet"
+        },
+        "extract_grammys": {
+            "state": "SUCCESS",
+            "duration_sec": 0.19,
+            "output": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\work\\grammys_raw.parquet"
+        },
+        "validate_spotify_raw": {
+            "state": "FAILED",
+            "duration_sec": 0.78,
+            "error": "Critical GX validation failure",
+            "max_severity": "FailureSeverity.CRITICAL"
+        },
+        "validate_grammys_raw": {
+            "state": "BLOCKED_UPSTREAM_FAILED"
+        },
+        "transform_and_integrate": {
+            "state": "BLOCKED_UPSTREAM_FAILED"
+        },
+        "validate_prepared": {
+            "state": "BLOCKED_UPSTREAM_FAILED"
+        },
+        "load_dw": {
+            "state": "BLOCKED_UPSTREAM_FAILED"
+        }
+    },
+    "final_state": "FAILED",
+    "error_message": "[CIRCUIT BREAKER] Spotify raw validation failed with CRITICAL severity. Blocking downstream tasks.",
+    "end_time": "2026-10-14T01:50:27.857195",
+    "total_elapsed_sec": 1.63
+}

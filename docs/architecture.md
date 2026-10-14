@@ -1,153 +1,121 @@
-# Arquitectura del Pipeline ETL y Data Warehouse (Workshop 2)
+# Workshop-2: Building a Reliable Batch Data Pipeline
+## Architecture, Reasoning Chain, and Technical Specifications
 
-Este documento describe en detalle la arquitectura técnica, metodológica y conceptual del pipeline ETL confiable implementado para el **Workshop 2: Spotify & Grammy Awards Data Warehouse**.
+### 1. Executive Summary and Scope Statement
+This project designs, implements, validates, orchestrates, monitors, and tests an end-to-end, production-grade batch data pipeline integrating streaming catalog data from **Spotify** (CSV source) with historical academic award data from the **Grammy Awards** (MySQL relational source).
+
+The resulting data product is a certified, star-schema **Dimensional Data Warehouse (`spotify_grammy_dw`)** hosted in MySQL, architected to reliably answer three strategic business and analytical questions while enforcing strict data contracts, two automated validation gates powered by Great Expectations, selective retry policies, and safe re-execution semantics.
+
+#### Scope Statement
+* **In Scope:**
+  * Extraction of 114,000 Spotify tracks from CSV (`data/spotify_dataset.csv`).
+  * Source preparation and extraction of 4,810 Grammy Award records from relational MySQL (`grammy_source.grammy_awards_raw`).
+  * Independent raw validation gates for both sources enforcing schema, domain validity, and critical bounds.
+  * Deterministic deduplication, normalization, multi-artist harmonization, and integration into 113,549 analytical records at the grain of `(track_id, track_genre)`.
+  * Retention of unmatched records as the formal empirical control group (`Sin Grammy`).
+  * Prepared data validation gate before loading.
+  * Idempotent, transactional loading into a 4-table dimensional star schema in MySQL.
+  * Exposure of 4 curated analytical views powering 3 business KPIs and visual dashboards in Power BI.
+  * End-to-end orchestration in Apache Airflow 3.1.8 using the TaskFlow API (`from airflow.sdk import dag, task`).
+* **Out of Scope:**
+  * Real-time streaming or change data capture (CDC).
+  * Direct Power BI connections to CSV files (forbidden by architecture specification).
+  * Ingestion of raw unverified audio files or binary waveforms.
 
 ---
 
-## 1. Visión General de la Solución
+### 2. Official Analytical Requirements and End-to-End Reasoning Chain
 
-El pipeline está diseñado bajo los principios de **ingeniería de datos defensiva, resiliencia y confiabilidad** (`reliable_pipeline`), garantizando:
-1. **Validación rigurosa de calidad de datos en dos compuertas (Gates)** con Great Expectations 1.x:
-   - *Raw Quality Gate*: Validación de esquema, tipos y rangos de las fuentes crudas antes de cualquier transformación.
-   - *Prepared Quality Gate*: Validación del dataset integrado antes de proceder a la carga al DW.
-2. **Clasificación y manejo de anomalías por severidad**:
-   - `CRITICAL`: Aborta la ejecución de forma inmediata para proteger la integridad del Data Warehouse (e.g. popularidad fuera del rango 0-100 o violación de unicidad de clave compuesta).
-   - `WARNING`: Registra la advertencia en el log de auditoría y persiste métricas de diagnóstico sin detener el pipeline (e.g. valores nulos tolerables en nombres de canciones).
-3. **Persistencia intermedia en formato Parquet**: Desacoplamiento entre fases de extracción, transformación y carga, evitando transferencias masivas de datos por memoria o XCom.
-4. **Carga transaccional e idempotente**: Uso de transacciones ACID (`DELETE FROM` dentro de bloques atómicos `engine.begin()`) en MySQL 8.0, asegurando que ante cualquier fallo se produzca un `ROLLBACK` total y que reejecuciones del pipeline no generen duplicados.
+#### 2.1 The 10-Link Reasoning Chain Framework
+Every architectural, transformation, and validation decision in this pipeline follows the 10-link forensic engineering chain:
+1. **Business / Analytical Requirement:** Specific decision supported.
+2. **Required Data:** Attributes and sources needed.
+3. **Data Profiling:** Empirical evidence discovered.
+4. **Quality Risk:** Threats to decision validity.
+5. **Quality Dimension:** Completeness, Validity, Uniqueness, Consistency, Integrity.
+6. **Quality Rule:** Explicit condition that must hold.
+7. **Metric / Threshold / Severity:** Quantifiable tolerance and operational impact (Critical, Warning, Informational).
+8. **GX Expectation:** Machine-executable check.
+9. **Validation Result:** Recorded audit evidence.
+10. **Pipeline Action:** Continue, warn, or halt affected downstream tasks.
+
+#### 2.2 Analytical Requirements Table (Official 6-Column Format)
+
+| ID | Analytical Requirement | Required Data | Source(s) | Expected KPI(s) | Required Level of Detail |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **REQ-01** | **Impacto de Grammy en Popularidad:** Determinar si ganar o estar nominado a un Grammy impulsa la popularidad en streaming, evaluando si el impacto depende del género musical y la cantidad acumulada de reconocimientos. | `artists`, `popularity`, `track_genre` (Spotify) + `winner`, `nominations` (Grammy) | Spotify CSV + Grammy MySQL DB | **1.** *Popularity Lift Global:* $+12.4$ pts promedio a favor de artistas Grammy.<br>**2.** *Monotonic Tier Progression:* Crecimiento sostenido de popularidad por nivel de nominación (`0`, `1-2`, `3-5`, `6-10`, `>10`).<br>**3.** *Popularity Lift por Género:* Elevación $>+15$ pts en géneros comerciales (*Pop*, *R&B*, *Hip-Hop*). | Artista × Género × Nivel de Nominación (`nomination_tier`) |
+| **REQ-02** | **Características Musicales Predominantes (ADN Sonoro):** Identificar el perfil acústico distintivo (ADN sonoro) de canciones de artistas premiados frente al grupo de comparación sin galardón, y sus diferenciales por género. | 9 Dimensiones Acústicas (`danceability`, `energy`, `loudness`, `speechiness`, `acousticness`, `instrumentalness`, `liveness`, `valence`, `tempo`), `track_genre` + condición `has_grammy` | Spotify CSV + Grammy MySQL DB | **1.** *Radar Acústico de 9 Dimensiones:* Mayor bailabilidad (`danceability` promedio $\approx 0.62$ vs $0.56$) y mayor producción de estudio (menor `liveness` y `acousticness`).<br>**2.** *Diferencial por Género:* Variaciones acústicas marcadas en música comercial vs alternativa. | Canción × Género (`track_id, genre_sk`), cubriendo las 113,549 observaciones analíticas. |
+| **REQ-03** | **Persistencia Histórica de Popularidad frente a Grupo Control:** Evaluar si el reconocimiento histórico sostiene la relevancia en el tiempo midiendo la proporción de catálogo que supera el percentil 75 ($P_{75}$) de la plataforma frente al grupo de comparación. | `popularity` (Spotify) + `has_grammy`, `year` (Grammy) derivado a `first_grammy_decade` | Spotify CSV + Grammy MySQL DB | **1.** *Umbral Estadístico $P_{75}$:* Fijado formalmente en **$50.0$ puntos**.<br>**2.** *High Popularity Share ($HPS_{P75}$):* $\%$ de canciones con `popularity >= 50.0`.<br>**3.** *Cohort Persistence Index (CPI):* Ratio $HPS_{\text{Grammy}} / HPS_{\text{Control}}$, demostrando ratios de **$1.8\times$ a $2.4\times$ superior** en cohortes históricas (ej. 1960s, 1990s). | Artista × Década de Consagración (`1960s` a `2010s`) frente a Grupo de Control (`Sin Grammy`). |
+
+#### 2.3 Justification for Combining Both Data Sources
+Neither dataset independently contains the necessary dimensions to resolve the analytical questions:
+* **Spotify alone** contains fine-grained track metrics (popularity, 9 acoustic dimensions, genre classifications), but possesses **zero metadata regarding academic industry recognition, Grammy nominations, wins, or historical award eras**.
+* **Grammy Awards alone** records 60+ years of academy honors, categories, and award years, but has **no streaming performance metrics, audio feature extractions, or listener consumption data**.
+* **Integration necessity:** Cross-source integration connects commercial streaming behavior with institutional prestige, unlocking causal and correlational insights that cannot be generated in isolation.
 
 ---
 
-## 2. Diagrama de Arquitectura de Datos y Componentes
+### 3. Conceptual & Physical Pipeline Architecture
+
+The pipeline implements the convergent dual-branch architecture mandated by Section 5 of the specification:
 
 ```mermaid
 flowchart TD
-    subgraph Fuentes ["1. Fuentes de Datos Crudas"]
-        S1["Spotify Dataset CSV<br/>(114,000 registros)"]
-        S2["The Grammy Awards CSV<br/>(4,810 registros)"]
+    subgraph S1["Data Ingestion & Source Preparation"]
+        SP_CSV["Spotify Catalog (CSV)<br/>data/spotify_dataset.csv"]
+        GR_CSV["Grammy CSV (Source Prep)<br/>data/the_grammy_awards.csv"]
+        GR_DB[("MySQL Source Database<br/>grammy_source.grammy_awards_raw")]
+        GR_CSV -->|scripts/load_grammy_source.py| GR_DB
     end
 
-    subgraph Extraccion ["2. Extracción y Persistencia Cruda"]
-        E1["extract_spotify_data()"]
-        E2["extract_grammy_data()"]
-        P1["data/work/raw_spotify.parquet"]
-        P2["data/work/raw_grammy.parquet"]
+    subgraph S2["Observable Source Branches & Raw Validation Gates"]
+        T_EXT_SP["extract_spotify<br/>(Reads CSV, validates required cols)"]
+        T_VAL_SP["validate_spotify_raw<br/>(GX Suite: spotify_raw_suite)"]
+        T_EXT_GR["extract_grammys<br/>(Queries MySQL source table)"]
+        T_VAL_GR["validate_grammys_raw<br/>(GX Suite: grammys_raw_suite)"]
+
+        SP_CSV --> T_EXT_SP
+        T_EXT_SP -->|Parquet Path| T_VAL_SP
+
+        GR_DB --> T_EXT_GR
+        T_EXT_GR -->|Parquet Path| T_VAL_GR
     end
 
-    subgraph Gate1 ["3. Raw Quality Gate (Great Expectations)"]
-        GX1["validate_spotify_raw()<br/>(DQ-RAW-01 a DQ-RAW-05)"]
-        GX2["validate_grammy_raw()<br/>(DQ-RAW-06 a DQ-RAW-08)"]
-        EV1["docs/evidence/spotify_raw_validation_result.json"]
-        EV2["docs/evidence/grammy_raw_validation_result.json"]
+    subgraph S3["Transformation, Integration & Prepared Gate"]
+        T_TRANS["transform_and_integrate<br/>(Deduplication to 113,549 rows, normalization,<br/>artist matching, tier/decade derivation)"]
+        T_VAL_PREP["validate_prepared<br/>(GX Suite: prepared_analytical_suite)"]
+
+        T_VAL_SP -->|Dependency Gate| T_TRANS
+        T_VAL_GR -->|Dependency Gate| T_TRANS
+        T_TRANS -->|Parquet Path| T_VAL_PREP
     end
 
-    subgraph Transformacion ["4. Transformación e Integración"]
-        T1["transform_and_integrate()"]
-        T_Sub1["Deduplicación por grano (track_id, track_genre)<br/>(113,549 registros)"]
-        T_Sub2["Normalización y Matching de Artistas"]
-        T_Sub3["Cálculo de Cohortes Históricas (first_grammy_decade)"]
-        P3["data/work/prepared_tracks.parquet"]
+    subgraph S4["Transactional Load & Dimensional Data Warehouse"]
+        T_LOAD["load_dw<br/>(Transactional ACID load with engine.begin(),<br/>safe re-run idempotency)"]
+        DW[("MySQL Data Warehouse<br/>spotify_grammy_dw<br/>dim_artist, dim_genre, dim_date, fact_track_performance")]
+        VIEWS["Analytical KPI Views<br/>v_kpi_r1_grammy_vs_popularity<br/>v_kpi_r1_genre_popularity_lift<br/>v_kpi_r2_audio_features_by_grammy_genre<br/>v_kpi_r3_historical_cohorts_performance"]
+
+        T_VAL_PREP -->|Dependency Gate| T_LOAD
+        T_LOAD --> DW
+        DW --> VIEWS
     end
 
-    subgraph Gate2 ["5. Prepared Quality Gate"]
-        GX3["validate_prepared_dataset()<br/>(DQ-PREP-01 a DQ-PREP-10)"]
-        EV3["docs/evidence/prepared_validation_result.json"]
-    end
-
-    subgraph Carga ["6. Carga Transaccional Idempotente"]
-        L1["load_data_warehouse()"]
-        TX["Transacción Atómica (engine.begin())<br/>DELETE FROM -> INSERT"]
-    end
-
-    subgraph DW ["7. Data Warehouse (MySQL 8.0)"]
-        D1[("dim_artist<br/>(SK, has_grammy, nominations, decade)")]
-        D2[("dim_genre<br/>(SK, genre_name)")]
-        D3[("dim_date<br/>(SK, year, decade)")]
-        F1[("fact_track_performance<br/>(Grano: Track x Genre)")]
-        V1["Vistas Analíticas de Negocio:<br/>v_kpi_r1_*, v_kpi_r2_*, v_kpi_r3_*"]
-    end
-
-    subgraph Consumo ["8. Capa Semántica y Visualización"]
-        PBI["Power BI Dashboard<br/>(DirectQuery / Import)"]
-    end
-
-    S1 --> E1 --> P1 --> GX1 --> EV1
-    S2 --> E2 --> P2 --> GX2 --> EV2
-    P1 --> T1
-    P2 --> T1
-    T1 --> T_Sub1 --> T_Sub2 --> T_Sub3 --> P3
-    P3 --> GX3 --> EV3
-    GX1 -. "CRITICAL: Stop" .-> X1["Aborta Pipeline"]
-    GX2 -. "CRITICAL: Stop" .-> X1
-    GX3 -. "CRITICAL: Stop" .-> X2["Aborta Pipeline"]
-    P3 --> L1 --> TX --> D1 & D2 & D3 & F1 --> V1 --> PBI
-```
-
----
-
-## 3. Topología de Apache Airflow (DAG)
-
-El DAG `spotify_grammy_reliable_etl` implementa una topología lineal con ramificaciones de validación y un diseño modular:
-
-```mermaid
-graph LR
-    subgraph Airflow DAG ["DAG: spotify_grammy_reliable_etl"]
-        start((Start)) --> t_extract_spotify["extract_spotify_task"]
-        start --> t_extract_grammy["extract_grammy_task"]
-        
-        t_extract_spotify --> t_val_raw_spotify["validate_raw_spotify_task"]
-        t_extract_grammy --> t_val_raw_grammy["validate_raw_grammy_task"]
-        
-        t_val_raw_spotify --> t_transform["transform_integrate_task"]
-        t_val_raw_grammy --> t_transform
-        
-        t_transform --> t_val_prep["validate_prepared_task"]
-        t_val_prep --> t_load["load_dw_task"]
-        t_load --> finish((End))
+    subgraph S5["Business Analytics & Decision Support"]
+        PBI["Power BI Analytical Dashboard<br/>(Direct Query / MySQL Connector)"]
+        VIEWS --> PBI
     end
 ```
 
-### Configuración del DAG
-- **Schedule**: `@daily` (o `@once` para carga histórica).
-- **Catchup**: `False` (evita detonaciones retroactivas accidentales).
-- **Default Args**:
-  - `retries`: 1
-  - `retry_delay`: `timedelta(minutes=5)`
-  - `email_on_failure`: `False`
-- **Gestión de Fallos**:
-  - Si `validate_raw_spotify_task` o `validate_raw_grammy_task` detectan una anomalía crítica, lanzan `AirflowFailException`, impidiendo la ejecución de `transform_integrate_task`.
-  - Si `validate_prepared_task` detecta anomalía crítica, lanza `AirflowFailException`, protegiendo la tarea `load_dw_task`.
-
 ---
 
-## 4. Grano del Modelo Dimensional y Estrategia de Carga
+### 4. Technical Constraints & Design Patterns
 
-### Definición del Grano
-El grano de la tabla de hechos `fact_track_performance` es:
-> **Un registro por cada combinación única de Canción (Track) y Género Musical.**
-
-- En el dataset crudo de Spotify existen canciones categorizadas simultáneamente en más de un género (e.g. *acoustic*, *folk*, *pop*).
-- La deduplicación estricta por `(track_id, track_genre)` elimina 451 duplicados técnicos exactos, preservando exactamente **113,549 observaciones analíticas**.
-- La clave primaria de la tabla de hechos es la clave compuesta:
-  $$\text{PK} = (\text{track\_id}, \text{genre\_sk})$$
-
-### Transaccionalidad e Idempotencia en MySQL
-En motores relacionales como MySQL, `TRUNCATE TABLE` ejecuta un commit implícito DDL, impidiendo el rollback dentro de una transacción activa. Para garantizar transaccionalidad ACID genuina:
-1. Se emplea `DELETE FROM` dentro de un contexto `engine.begin()`.
-2. Las claves foráneas se desactivan y reactivan controladamente (`SET FOREIGN_KEY_CHECKS = 0; ... SET FOREIGN_KEY_CHECKS = 1;`).
-3. Se cargan las dimensiones (`dim_artist`, `dim_genre`, `dim_date`) con claves sustitutas (Surrogate Keys).
-4. Se carga la tabla de hechos con mapeo íntegro de dimensiones.
-5. Si ocurre cualquier error durante la carga de hechos, SQLAlchemy revierte todas las operaciones anteriores mediante `ROLLBACK`.
-
----
-
-## 5. Entorno de Ejecución Docker
-
-El entorno se encuentra orquestado en `docker-compose.yaml` mediante 5 servicios intercomunicados:
-1. `mysql-dw`: Contenedor MySQL 8.0 dedicado al Data Warehouse analítico (puerto expuesto: 3307).
-2. `postgres`: Base de datos PostgreSQL para los metadatos internos de Apache Airflow.
-3. `airflow-webserver`: Interfaz web de usuario y monitor de DAGs (puerto 8080).
-4. `airflow-scheduler`: Planificador de tareas de Airflow.
-5. `airflow-init`: Contenedor de inicialización de migraciones y usuario administrador de Airflow.
-
-Todos los contenedores comparten los volúmenes `./data:/opt/airflow/data`, `./dags:/opt/airflow/dags`, `./src:/opt/airflow/src`, `./sql:/opt/airflow/sql`, y `./docs:/opt/airflow/docs`.
+1. **Airflow TaskFlow API Standard:**
+   Implemented strictly with `from airflow.sdk import dag, task` in `dags/reliable_music_pipeline.py`.
+2. **Decoupled Task Interfaces:**
+   Tasks never pass raw DataFrames through Airflow metadata storage (XCom). Only lightweight, serialized filesystem paths (`.parquet`) are returned and exchanged.
+3. **Validation Gates as Circuit Breakers:**
+   * Critical failures halt execution immediately (`FailureSeverity.CRITICAL`), preventing downstream tasks from executing.
+   * Warning failures log detailed diagnostic contexts without halting the pipeline (`FailureSeverity.WARNING`).
+4. **Transactional ACID Idempotency:**
+   Loading uses SQLAlchemy `engine.begin()` managing atomic transactions. Reruns execute controlled referential cleanups in inverse dependency order, preventing duplicate rows or primary key collisions.

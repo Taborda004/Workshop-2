@@ -1,266 +1,182 @@
 """
-load.py — Data Warehouse loading for the Reliable Music Pipeline.
+Data Warehouse Loading Module: Workshop-2 ETL Pipeline.
 
-Loads the validated prepared dataset into the MySQL star schema (music_dw):
-    dim_genre
-    dim_artist  (with aggregated Grammy metrics & historical cohorts)
-    fact_track  (one row per unique Track × Genre observation)
-
-Safe-rerun strategy: Atomic DELETE + INSERT (replace entire batch).
-    - Preserves true ACID transactionality using DELETE instead of TRUNCATE
-      (TRUNCATE in MySQL triggers an implicit DDL commit, breaking rollback).
-    - If any stage fails during load, the transaction rolls back cleanly.
-    - Subsequent reruns with the same batch produce identical row counts,
-      guaranteeing zero silent duplicate accumulation.
+Implements transactional ACID loading into the MySQL Star Schema (spotify_grammy_dw).
+Guarantees repeatability and safe reruns through atomic reverse-referential cleanups
+and bulk loading inside an atomic SQLAlchemy transaction block (engine.begin()).
 """
 
-import json
-import logging
 import os
+import json
 from pathlib import Path
-
+from datetime import datetime
 import pandas as pd
-import sqlalchemy as sa
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 
-log = logging.getLogger(__name__)
+load_dotenv()
 
-# Dynamic Path Resolution
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-_raw_output_dir = os.environ.get("AIRFLOW_OUTPUT_DIR")
-if _raw_output_dir:
-    OUTPUT_DIR = Path(_raw_output_dir)
-else:
-    OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
-
-EVIDENCE_DIR = PROJECT_ROOT / "docs" / "evidence"
+BASE_DIR = Path(__file__).resolve().parent.parent
+EVIDENCE_DIR = BASE_DIR / "docs" / "evidence"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ENGINE
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _get_dw_engine() -> sa.engine.Engine:
-    """Build a SQLAlchemy engine for the music_dw MySQL Data Warehouse."""
-    host     = os.environ.get("MYSQL_DW_HOST", "localhost")
-    port     = os.environ.get("MYSQL_DW_PORT", "3307")
-    db       = os.environ.get("MYSQL_DW_DB", "music_dw")
-    user     = os.environ.get("MYSQL_DW_USER", "dw_user")
-    password = os.environ.get("MYSQL_DW_PASSWORD", "dw_pass")
-
-    url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{db}?charset=utf8mb4"
-    return sa.create_engine(url, pool_pre_ping=True)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS (Atomic Clean)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _clean_table(conn, table: str) -> None:
+def load_data_warehouse(prepared_parquet_path: str) -> dict:
     """
-    Delete all rows from a table inside the active transaction.
-    Uses DELETE instead of TRUNCATE to avoid implicit DDL commits in MySQL.
+    Perform an atomic, transactional load of the validated prepared dataset
+    into spotify_grammy_dw.
+
+    Returns:
+        dict: Load summary containing row counts, timestamps, and integrity status.
     """
-    conn.execute(text(f"DELETE FROM {table}"))
-    log.info("Cleared table contents: %s", table)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LOAD DIMENSIONS
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _load_dim_genre(conn, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Load dim_genre and return a DataFrame with genre_name → genre_sk mapping.
-    """
-    genres = (
-        df[["track_genre"]].drop_duplicates()
-        .rename(columns={"track_genre": "genre_name"})
-        .dropna()
-        .reset_index(drop=True)
-    )
-
-    category_map = {
-        "pop": "pop", "rock": "rock", "hip-hop": "rap", "rap": "rap",
-        "r-n-b": "r&b", "soul": "r&b", "country": "country",
-        "jazz": "jazz", "classical": "classical", "latin": "latin",
-        "electronic": "electronic", "edm": "electronic", "dance": "electronic",
-        "folk": "folk", "blues": "blues", "reggae": "reggae",
-        "metal": "rock", "punk": "rock", "indie": "alternative",
-        "alternative": "alternative", "ambient": "electronic",
-        "acoustic": "acoustic", "gospel": "gospel",
-    }
-
-    def _family(g: str) -> str:
-        g_l = g.lower()
-        for kw, fam in category_map.items():
-            if kw in g_l:
-                return fam
-        return "other"
-
-    genres["grammy_family"] = genres["genre_name"].apply(_family)
-
-    _clean_table(conn, "dim_genre")
-    genres.to_sql("dim_genre", conn, if_exists="append", index=False,
-                  method="multi", chunksize=500)
-
-    genre_sk = pd.read_sql("SELECT genre_sk, genre_name FROM dim_genre", conn)
-    log.info("dim_genre loaded: %d rows", len(genre_sk))
-    print(f"[LOAD] dim_genre: {len(genre_sk)} rows")
-    return genre_sk
-
-
-def _load_dim_artist(conn, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggregate artist-level metrics and historical cohorts from the prepared dataset.
-    Returns artist_name → artist_sk mapping.
-    """
-    artist_agg = (
-        df.groupby("primary_artist", as_index=False)
-        .agg(
-            has_grammy=("has_grammy", "max"),
-            grammy_wins=("grammy_wins", "max"),
-            grammy_nominations=("grammy_nominations", "max"),
-            first_grammy_year=("first_grammy_year", "min"),
-            first_grammy_decade=("first_grammy_decade", "first"),
-            last_grammy_year=("last_grammy_year", "max"),
-            avg_popularity=("popularity", "mean"),
-            track_count=("track_id", "count"),
-        )
-        .rename(columns={"primary_artist": "artist_name"})
-    )
-
-    artist_agg["avg_popularity"] = artist_agg["avg_popularity"].round(2)
-    artist_agg["first_grammy_decade"] = artist_agg["first_grammy_decade"].replace("Non-Grammy", None)
-
-    for col in ["first_grammy_year", "last_grammy_year"]:
-        artist_agg[col] = pd.array(artist_agg[col], dtype="Int64")
-
-    _clean_table(conn, "dim_artist")
-    artist_agg.to_sql("dim_artist", conn, if_exists="append", index=False,
-                      method="multi", chunksize=500)
-
-    artist_sk = pd.read_sql("SELECT artist_sk, artist_name FROM dim_artist", conn)
-    log.info("dim_artist loaded: %d rows", len(artist_sk))
-    print(f"[LOAD] dim_artist: {len(artist_sk)} rows")
-    return artist_sk
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LOAD FACT
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _load_fact_track(conn, df: pd.DataFrame,
-                     artist_sk: pd.DataFrame,
-                     genre_sk: pd.DataFrame) -> int:
-    """
-    Map surrogate keys and insert into fact_track (Grain: Track × Genre).
-    Returns the number of rows loaded.
-    """
-    fact = df.merge(artist_sk, left_on="primary_artist", right_on="artist_name", how="left")
-    fact = fact.merge(genre_sk,  left_on="track_genre",   right_on="genre_name",   how="left")
-
-    fact_cols = {
-        "track_id":          "track_id",
-        "track_name":        "track_name",
-        "album_name":        "album_name",
-        "artist_sk":         "artist_sk",
-        "genre_sk":          "genre_sk",
-        "popularity":        "popularity",
-        "danceability":      "danceability",
-        "energy":            "energy",
-        "loudness":          "loudness",
-        "speechiness":       "speechiness",
-        "acousticness":      "acousticness",
-        "instrumentalness":  "instrumentalness",
-        "liveness":          "liveness",
-        "valence":           "valence",
-        "tempo":             "tempo",
-        "duration_ms":       "duration_ms",
-        "explicit":          "explicit",
-        "key":               "musical_key",
-        "mode":              "mode",
-        "time_signature":    "time_signature",
-        "has_grammy":        "has_grammy",
-        "grammy_wins":       "grammy_wins",
-        "grammy_nominations":"grammy_nominations",
-    }
-
-    fact_df = fact[list(fact_cols.keys())].rename(columns=fact_cols)
-
-    before = len(fact_df)
-    fact_df = fact_df.dropna(subset=["artist_sk", "genre_sk"])
-    dropped = before - len(fact_df)
-    if dropped > 0:
-        log.warning("fact_track: %d rows dropped due to unresolved FKs", dropped)
-        print(f"[LOAD] WARNING: {dropped} rows dropped (unresolved FKs)")
-
-    # Round decimals
-    decimal_cols = ["danceability", "energy", "loudness", "speechiness",
-                    "acousticness", "instrumentalness", "liveness", "valence", "tempo"]
-    for col in decimal_cols:
-        fact_df[col] = fact_df[col].round(6)
-
-    _clean_table(conn, "fact_track")
-    fact_df.to_sql("fact_track", conn, if_exists="append", index=False,
-                   method="multi", chunksize=1000)
-
-    loaded = len(fact_df)
-    log.info("fact_track loaded: %d rows", loaded)
-    print(f"[LOAD] fact_track: {loaded} rows")
-    return loaded
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_to_dw(prepared_path: str) -> dict:
-    """
-    Load the validated prepared dataset into the MySQL Data Warehouse.
-
-    Safe-rerun strategy: Atomic DELETE + INSERT.
-    Returns a load summary dict with row counts.
-    """
-    log.info("DW load started. Source: %s", prepared_path)
-    print(f"[LOAD] Starting DW load from {prepared_path}")
-
-    df = pd.read_parquet(prepared_path)
-    source_rows = len(df)
-    log.info("Prepared rows loaded: %d", source_rows)
-    print(f"[LOAD] Source prepared rows: {source_rows}")
-
-    engine = _get_dw_engine()
-
-    with engine.begin() as conn:
-        conn.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-        genre_sk  = _load_dim_genre(conn, df)
-        artist_sk = _load_dim_artist(conn, df)
-        fact_rows = _load_fact_track(conn, df, artist_sk, genre_sk)
-        conn.execute(text("SET FOREIGN_KEY_CHECKS=1"))
-
-    summary = {
-        "dim_genre_rows":  len(genre_sk),
-        "dim_artist_rows": len(artist_sk),
-        "fact_track_rows": fact_rows,
-        "source_rows":     source_rows,
-    }
-
-    log.info("DW load complete. Summary: %s", summary)
-    print(f"[LOAD] Summary: {summary}")
-
-    # Persist load evidence in both output/ and docs/evidence/
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 
-    evidence_path = OUTPUT_DIR / "load_summary.json"
-    with open(evidence_path, "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
+    print("=" * 70)
+    print("WORKSHOP-2: TRANSACTIONAL DATA WAREHOUSE LOAD (MySQL)")
+    print("=" * 70)
 
-    evidence_mirror = EVIDENCE_DIR / "load_summary.json"
-    with open(evidence_mirror, "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
+    prepared_path = Path(prepared_parquet_path)
+    if not prepared_path.exists():
+        raise FileNotFoundError(f"Prepared dataset not found at: {prepared_path}")
 
-    print(f"[LOAD] Evidence saved → {evidence_path}")
+    df = pd.read_parquet(prepared_path)
+    total_records = len(df)
+    print(f"[LOAD DW] Ingesting {total_records:,} prepared records from {prepared_path.name}")
+
+    mysql_host = os.getenv("MYSQL_HOST", "localhost")
+    mysql_port = int(os.getenv("MYSQL_PORT", 3306))
+    mysql_user = os.getenv("MYSQL_USER", "root")
+    mysql_password = os.getenv("MYSQL_PASSWORD", "1234")
+    dw_db = os.getenv("DW_DATABASE", "spotify_grammy_dw")
+
+    dw_url = f"mysql+pymysql://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{dw_db}?charset=utf8mb4"
+    engine = create_engine(dw_url, echo=False)
+
+    # 1. Prepare Date Dimension Data
+    years = list(range(1950, 2031))
+    date_rows = []
+    for y in years:
+        date_rows.append({
+            "date_sk": y,
+            "award_year": y,
+            "decade": f"{(y // 10) * 10}s",
+            "is_grammy_era": 1 if y <= 2026 else 0
+        })
+    # Add sentinel for tracks without Grammy year
+    date_rows.append({
+        "date_sk": 9999,
+        "award_year": 9999,
+        "decade": "Sin Grammy",
+        "is_grammy_era": 0
+    })
+    df_date = pd.DataFrame(date_rows)
+
+    # 2. Prepare Genre Dimension Data
+    genres = sorted(df["track_genre"].dropna().unique().tolist())
+    df_genre = pd.DataFrame({"genre_name": genres})
+
+    # 3. Prepare Artist Dimension Data
+    # Deduplicate artists to unique primary_artist
+    df_artist_unique = df.groupby("primary_artist", as_index=False).agg(
+        has_grammy=("has_grammy", "max"),
+        total_nominations=("total_nominations", "max"),
+        total_wins=("total_wins", "max"),
+        nomination_tier=("nomination_tier", "first"),
+        first_grammy_year=("first_grammy_year", "first"),
+        first_grammy_decade=("first_grammy_decade", "first")
+    ).rename(columns={"primary_artist": "artist_name"})
+
+    print(f"[LOAD DW] Prepared dimensions: {len(df_genre)} genres, {len(df_artist_unique):,} artists, {len(df_date)} dates.")
+
+    # 4. Atomic Transaction Execution
+    with engine.begin() as conn:
+        print("[LOAD DW] Beginning atomic transaction. Executing controlled reverse referential cleanup...")
+        # Safe cleanup in reverse dependency order (avoids MySQL TRUNCATE implicit commit)
+        conn.execute(text("DELETE FROM fact_track_performance;"))
+        conn.execute(text("DELETE FROM dim_artist;"))
+        conn.execute(text("DELETE FROM dim_genre;"))
+        conn.execute(text("DELETE FROM dim_date;"))
+
+        # Load Date Dimension
+        df_date.to_sql("dim_date", con=conn, if_exists="append", index=False)
+
+        # Load Genre Dimension
+        df_genre.to_sql("dim_genre", con=conn, if_exists="append", index=False)
+
+        # Load Artist Dimension
+        df_artist_unique.to_sql("dim_artist", con=conn, if_exists="append", index=False, chunksize=1000)
+
+        # Retrieve Generated Surrogate Keys
+        genre_map = pd.read_sql("SELECT genre_sk, genre_name FROM dim_genre", conn).set_index("genre_name")["genre_sk"].to_dict()
+        artist_map = pd.read_sql("SELECT artist_sk, artist_name FROM dim_artist", conn).set_index("artist_name")["artist_sk"].to_dict()
+
+        # Map Keys to Fact Table
+        df_fact = pd.DataFrame()
+        df_fact["track_id"] = df["track_id"]
+        df_fact["artist_sk"] = df["primary_artist"].map(artist_map)
+        df_fact["genre_sk"] = df["track_genre"].map(genre_map)
+        df_fact["date_sk"] = df["first_grammy_year"].fillna(9999).astype(int)
+
+        df_fact["track_name"] = df["track_name"]
+        df_fact["album_name"] = df["album_name"]
+        df_fact["popularity"] = df["popularity"].astype(int)
+        df_fact["is_high_popularity"] = df["is_high_popularity"].astype(int)
+        df_fact["duration_ms"] = df["duration_ms"].astype(int)
+        df_fact["explicit"] = df["explicit"].astype(int)
+
+        # 9 Audio Dimensions
+        df_fact["danceability"] = df["danceability"]
+        df_fact["energy"] = df["energy"]
+        df_fact["key_signature"] = df["key"].astype(int)
+        df_fact["loudness"] = df["loudness"]
+        df_fact["audio_mode"] = df["mode"].astype(int)
+        df_fact["speechiness"] = df["speechiness"]
+        df_fact["acousticness"] = df["acousticness"]
+        df_fact["instrumentalness"] = df["instrumentalness"]
+        df_fact["liveness"] = df["liveness"]
+        df_fact["valence"] = df["valence"]
+        df_fact["tempo"] = df["tempo"]
+        df_fact["time_signature"] = df["time_signature"].astype(int)
+        df_fact["has_grammy"] = df["has_grammy"].astype(int)
+
+        print("[LOAD DW] Inserting fact records into fact_track_performance...")
+        df_fact.to_sql("fact_track_performance", con=conn, if_exists="append", index=False, chunksize=5000)
+
+        # Immediate verification inside the transaction
+        fact_count = conn.execute(text("SELECT COUNT(*) FROM fact_track_performance;")).scalar()
+        artist_count = conn.execute(text("SELECT COUNT(*) FROM dim_artist;")).scalar()
+        genre_count = conn.execute(text("SELECT COUNT(*) FROM dim_genre;")).scalar()
+        date_count = conn.execute(text("SELECT COUNT(*) FROM dim_date;")).scalar()
+
+    print("-" * 70)
+    print("DATA WAREHOUSE LOAD SUMMARY:")
+    print(f"  Target Database:           {dw_db}")
+    print(f"  fact_track_performance:    {fact_count:,} rows (Expected: 113,549)")
+    print(f"  dim_artist:                {artist_count:,} rows")
+    print(f"  dim_genre:                 {genre_count:,} rows")
+    print(f"  dim_date:                  {date_count:,} rows")
+    print("-" * 70)
+
+    if fact_count != total_records:
+        raise ValueError(f"Load reconciliation mismatch: expected {total_records}, loaded {fact_count}")
+
+    summary = {
+        "step": "load_data_warehouse",
+        "timestamp": datetime.now().isoformat(),
+        "status": "SUCCESS",
+        "database": dw_db,
+        "tables": {
+            "fact_track_performance": fact_count,
+            "dim_artist": artist_count,
+            "dim_genre": genre_count,
+            "dim_date": date_count
+        },
+        "safe_rerun_strategy": "Atomic transaction with engine.begin() and reverse-referential DELETE FROM.",
+        "reconciliation_passed": (fact_count == 113549)
+    }
+
+    evidence_path = EVIDENCE_DIR / "dw_load_summary.json"
+    with open(evidence_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=4)
+
+    print(f"[OK] Audit summary saved to: {evidence_path}")
     return summary

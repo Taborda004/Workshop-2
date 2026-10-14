@@ -1,0 +1,46 @@
+{
+  "expectations": [
+    {
+      "id": "69e586d6-53db-4a1f-9def-1234404c4bf5",
+      "kwargs": {
+        "column": "year",
+        "max_value": 2030.0,
+        "min_value": 1958.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "7ca2b662-9457-4bb3-931c-18ed38db4d31",
+      "kwargs": {
+        "column": "winner",
+        "value_set": [
+          true,
+          false,
+          1,
+          0
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    },
+    {
+      "id": "1a07594f-2b83-4e0f-b696-c4d024fe715b",
+      "kwargs": {
+        "column": "category",
+        "mostly": 0.99
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_not_be_null"
+    }
+  ],
+  "id": "06e35afd-1510-4add-993e-c1a6fd8c42be",
+  "meta": {
+    "great_expectations_version": "1.24.0"
+  },
+  "name": "grammys_raw_expectation_suite",
+  "notes": null
+}

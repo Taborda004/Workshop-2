@@ -1,145 +1,119 @@
 -- ============================================================================
--- WORKSHOP 2 ETL - ANALYTICAL QUERIES FOR DATA WAREHOUSE VALIDATION & REPORTING
--- Database: spotify_grammy_dw (MySQL 8.0)
--- Grain: Track x Genre (Compound Key: track_id, genre_sk)
+-- WORKSHOP-2: ANALYTICAL QUERIES FOR DATA WAREHOUSE & POWER BI
+-- Target Database: spotify_grammy_dw (MySQL 8.0)
+-- 
+-- IMPORTANT (PDF Section 8.1):
+-- Every query directly targets the dimensional Data Warehouse (star schema and views).
+-- Direct CSV connections are strictly prohibited for the assessed BI solution.
 -- ============================================================================
 
 USE spotify_grammy_dw;
 
 -- ============================================================================
--- 1. REQ-01: GRAMMY RECOGNITION VS. POPULARITY ACROSS GENRES & NOMINATIONS
--- Question: ¿Existe una asociación entre el reconocimiento registrado en los
--- Grammy Awards y la popularidad de los artistas en Spotify, y cómo varía esta
--- relación según el género musical y la cantidad de reconocimientos?
+-- 1. REQ-01: Impact of Grammy Recognition on Spotify Popularity
 -- ============================================================================
 
--- Query 1.1: Overall Popularity Comparison by Grammy Recognition Tier
+-- Query 1.1: Global Popularity Lift and Monotonic Tier Progression
+-- Answers: Does Grammy recognition increase streaming popularity, and is the effect cumulative?
 SELECT 
-    da.has_grammy,
-    CASE 
-        WHEN da.has_grammy = 0 THEN '0. Sin Reconocimiento (Grupo Control)'
-        WHEN da.total_nominations BETWEEN 1 AND 2 THEN '1. 1-2 Nominaciones'
-        WHEN da.total_nominations BETWEEN 3 AND 5 THEN '2. 3-5 Nominaciones'
-        WHEN da.total_nominations BETWEEN 6 AND 10 THEN '3. 6-10 Nominaciones'
-        ELSE '4. Más de 10 Nominaciones'
-    END AS recognition_tier,
-    COUNT(DISTINCT ft.track_id) AS total_tracks,
-    COUNT(DISTINCT da.artist_sk) AS total_artists,
-    ROUND(AVG(ft.popularity), 2) AS avg_popularity,
-    ROUND(STDDEV(ft.popularity), 2) AS std_popularity,
-    ROUND(100.0 * SUM(CASE WHEN ft.popularity >= 50 THEN 1 ELSE 0 END) / COUNT(*), 2) AS high_popularity_share_pct
-FROM fact_track_performance ft
-JOIN dim_artist da ON ft.artist_sk = da.artist_sk
-GROUP BY da.has_grammy, recognition_tier
-ORDER BY da.has_grammy, recognition_tier;
-
--- Query 1.2: Popularity Lift by Genre (Grammy Recognized vs Comparison Group)
-SELECT 
-    dg.genre_name,
-    COUNT(CASE WHEN da.has_grammy = 1 THEN 1 END) AS grammy_tracks_count,
-    COUNT(CASE WHEN da.has_grammy = 0 THEN 1 END) AS comparison_tracks_count,
-    ROUND(AVG(CASE WHEN da.has_grammy = 1 THEN ft.popularity END), 2) AS avg_pop_grammy,
-    ROUND(AVG(CASE WHEN da.has_grammy = 0 THEN ft.popularity END), 2) AS avg_pop_comparison,
-    ROUND(
-        AVG(CASE WHEN da.has_grammy = 1 THEN ft.popularity END) - 
-        AVG(CASE WHEN da.has_grammy = 0 THEN ft.popularity END), 2
-    ) AS popularity_lift
-FROM fact_track_performance ft
-JOIN dim_genre dg ON ft.genre_sk = dg.genre_sk
-JOIN dim_artist da ON ft.artist_sk = da.artist_sk
-GROUP BY dg.genre_name
-HAVING grammy_tracks_count >= 20
-ORDER BY popularity_lift DESC
-LIMIT 20;
-
-
--- ============================================================================
--- 2. REQ-02: PREDOMINANT AUDIO FEATURES BY GRAMMY RECOGNITION & GENRE
--- Question: ¿Cuáles son las características musicales predominantes en las
--- canciones de Spotify asociadas con artistas reconocidos en los Grammy y cómo
--- varían según el género musical?
--- ============================================================================
-
--- Query 2.1: Macro Audio Profiles: Grammy Recognized vs. Comparison Group
-SELECT 
-    CASE WHEN da.has_grammy = 1 THEN 'Grammy Recognized' ELSE 'Comparison Group' END AS artist_cohort,
-    COUNT(*) AS total_track_genres,
-    ROUND(AVG(ft.danceability), 4) AS avg_danceability,
-    ROUND(AVG(ft.energy), 4) AS avg_energy,
-    ROUND(AVG(ft.loudness), 2) AS avg_loudness_db,
-    ROUND(AVG(ft.speechiness), 4) AS avg_speechiness,
-    ROUND(AVG(ft.acousticness), 4) AS avg_acousticness,
-    ROUND(AVG(ft.instrumentalness), 4) AS avg_instrumentalness,
-    ROUND(AVG(ft.liveness), 4) AS avg_liveness,
-    ROUND(AVG(ft.valence), 4) AS avg_valence,
-    ROUND(AVG(ft.tempo), 1) AS avg_tempo_bpm,
-    ROUND(AVG(ft.duration_ms) / 1000.0, 1) AS avg_duration_sec
-FROM fact_track_performance ft
-JOIN dim_artist da ON ft.artist_sk = da.artist_sk
-GROUP BY da.has_grammy;
-
--- Query 2.2: Audio Differences by Genre in Top Genres
-SELECT 
-    dg.genre_name,
-    ROUND(AVG(CASE WHEN da.has_grammy = 1 THEN ft.danceability END) - AVG(CASE WHEN da.has_grammy = 0 THEN ft.danceability END), 3) AS diff_danceability,
-    ROUND(AVG(CASE WHEN da.has_grammy = 1 THEN ft.energy END) - AVG(CASE WHEN da.has_grammy = 0 THEN ft.energy END), 3) AS diff_energy,
-    ROUND(AVG(CASE WHEN da.has_grammy = 1 THEN ft.acousticness END) - AVG(CASE WHEN da.has_grammy = 0 THEN ft.acousticness END), 3) AS diff_acousticness,
-    ROUND(AVG(CASE WHEN da.has_grammy = 1 THEN ft.valence END) - AVG(CASE WHEN da.has_grammy = 0 THEN ft.valence END), 3) AS diff_valence
-FROM fact_track_performance ft
-JOIN dim_genre dg ON ft.genre_sk = dg.genre_sk
-JOIN dim_artist da ON ft.artist_sk = da.artist_sk
-GROUP BY dg.genre_name
-HAVING COUNT(CASE WHEN da.has_grammy = 1 THEN 1 END) >= 30
-ORDER BY dg.genre_name;
-
-
--- ============================================================================
--- 3. REQ-03: HISTORICAL COHORTS & POPULARITY PERSISTENCE (P75 THRESHOLD)
--- Question: ¿Los artistas con reconocimiento registrado en los Grammy presentan
--- una mayor popularidad en Spotify que los artistas sin reconocimiento registrado,
--- o los artistas del grupo de comparación alcanzan niveles iguales o superiores?
--- ============================================================================
-
--- Query 3.1: Historical Cohort Performance by First Grammy Decade
-SELECT 
-    COALESCE(da.first_grammy_decade, 'Sin Grammy') AS first_recognition_decade,
-    COUNT(DISTINCT da.artist_sk) AS total_artists,
-    COUNT(DISTINCT ft.track_id) AS total_tracks,
-    ROUND(AVG(ft.popularity), 2) AS avg_popularity,
-    -- P75 Threshold is 50.0 based on statistical data profiling
-    ROUND(100.0 * SUM(CASE WHEN ft.popularity >= 50 THEN 1 ELSE 0 END) / COUNT(*), 2) AS high_popularity_share_pct,
-    ROUND(
-        (100.0 * SUM(CASE WHEN ft.popularity >= 50 THEN 1 ELSE 0 END) / COUNT(*)) / 
-        (SELECT 100.0 * SUM(CASE WHEN ft_c.popularity >= 50 THEN 1 ELSE 0 END) / COUNT(*) 
-         FROM fact_track_performance ft_c 
-         JOIN dim_artist da_c ON ft_c.artist_sk = da_c.artist_sk 
-         WHERE da_c.has_grammy = 0), 2
-    ) AS cohort_persistence_index_cpi
-FROM fact_track_performance ft
-JOIN dim_artist da ON ft.artist_sk = da.artist_sk
-GROUP BY COALESCE(da.first_grammy_decade, 'Sin Grammy')
+    grammy_status,
+    nomination_tier,
+    total_tracks,
+    avg_track_popularity,
+    max_track_popularity,
+    high_popularity_share_pct
+FROM v_kpi_r1_grammy_vs_popularity
 ORDER BY 
-    CASE 
-        WHEN first_recognition_decade = 'Sin Grammy' THEN '9999'
-        ELSE first_recognition_decade
+    CASE nomination_tier
+        WHEN '0' THEN 1
+        WHEN '1-2' THEN 2
+        WHEN '3-5' THEN 3
+        WHEN '6-10' THEN 4
+        WHEN '>10' THEN 5
+        ELSE 6
     END;
 
+-- Query 1.2: Genre-Specific Popularity Lift (Highlighting Commercial Genres)
+-- Answers: In which genres is the Grammy popularity boost strongest (> +15 pts)?
+SELECT 
+    genre_name,
+    total_tracks,
+    grammy_tracks_count,
+    control_tracks_count,
+    avg_pop_grammy,
+    avg_pop_control,
+    popularity_lift
+FROM v_kpi_r1_genre_popularity_lift
+WHERE popularity_lift > 15.0
+ORDER BY popularity_lift DESC;
+
+-- Query 1.3: Direct Fact-Level Lift Verification
+SELECT 
+    CASE WHEN a.has_grammy = 1 THEN 'Con Grammy' ELSE 'Sin Grammy' END AS group_name,
+    COUNT(f.fact_id) AS track_count,
+    ROUND(AVG(f.popularity), 2) AS mean_popularity,
+    ROUND(STDDEV(f.popularity), 2) AS std_popularity,
+    ROUND(MAX(f.popularity), 2) AS max_popularity
+FROM fact_track_performance f
+JOIN dim_artist a ON f.artist_sk = a.artist_sk
+GROUP BY CASE WHEN a.has_grammy = 1 THEN 'Con Grammy' ELSE 'Sin Grammy' END;
+
 
 -- ============================================================================
--- 4. VERIFICATION OF PRECOMPUTED KPI VIEWS (FOR POWER BI DIRECT QUERY / IMPORT)
+-- 2. REQ-02: Acoustic DNA Profile (9 Musical Dimensions)
 -- ============================================================================
 
--- View 1 Check:
-SELECT * FROM v_kpi_r1_grammy_vs_popularity LIMIT 10;
+-- Query 2.1: Multi-Dimensional Acoustic Radar Profile (Grammy vs Control Group)
+-- Answers: What is the acoustic profile distinguishing academy-honored songs from control?
+SELECT 
+    grammy_status,
+    COUNT(*) AS genre_cohort_count,
+    ROUND(AVG(avg_danceability), 4) AS danceability,
+    ROUND(AVG(avg_energy), 4) AS energy,
+    ROUND(AVG(avg_loudness), 2) AS loudness_db,
+    ROUND(AVG(avg_speechiness), 4) AS speechiness,
+    ROUND(AVG(avg_acousticness), 4) AS acousticness,
+    ROUND(AVG(avg_instrumentalness), 4) AS instrumentalness,
+    ROUND(AVG(avg_liveness), 4) AS liveness,
+    ROUND(AVG(avg_valence), 4) AS valence,
+    ROUND(AVG(avg_tempo), 2) AS tempo_bpm
+FROM v_kpi_r2_audio_features_by_grammy_genre
+GROUP BY grammy_status;
 
--- View 2 Check:
-SELECT * FROM v_kpi_r1_genre_popularity_lift ORDER BY popularity_lift DESC LIMIT 10;
+-- Query 2.2: Acoustic Feature Differentials in Commercial vs Alternative Genres
+SELECT 
+    genre_name,
+    grammy_status,
+    track_count,
+    avg_danceability,
+    avg_energy,
+    avg_acousticness,
+    avg_liveness
+FROM v_kpi_r2_audio_features_by_grammy_genre
+WHERE genre_name IN ('pop', 'rock', 'hip-hop', 'r-n-b', 'indie', 'folk')
+ORDER BY genre_name, grammy_status DESC;
 
--- View 3 Check:
-SELECT * FROM v_kpi_r2_audio_features_by_grammy_genre LIMIT 10;
 
--- View 4 Check:
-SELECT * FROM v_kpi_r3_historical_cohorts_performance;
+-- ============================================================================
+-- 3. REQ-03: Historical Cohorts Persistence vs Control Group
+-- ============================================================================
 
--- View 5 Check:
-SELECT * FROM v_kpi_artist_summary ORDER BY total_tracks DESC LIMIT 10;
+-- Query 3.1: Historical Cohort Performance, High Popularity Share (P75), and CPI
+-- Answers: Can older cohorts (1960s, 1970s) sustain 1.8x to 2.4x higher HPS than modern control?
+SELECT 
+    cohort_decade,
+    cohort_group,
+    total_tracks,
+    high_popularity_tracks,
+    hps_p75_pct,
+    avg_popularity,
+    cohort_persistence_index_cpi
+FROM v_kpi_r3_historical_cohorts_performance;
+
+-- Query 3.2: Verification of Empirical Quartile Threshold P75 = 50.0
+SELECT 
+    'Spotify Catalog P75 Threshold Verification' AS metric_label,
+    COUNT(*) AS total_fact_records,
+    SUM(CASE WHEN popularity >= 50 THEN 1 ELSE 0 END) AS records_ge_50,
+    ROUND(SUM(CASE WHEN popularity >= 50 THEN 1 ELSE 0 END) / COUNT(*) * 100, 2) AS empirical_hps_pct
+FROM fact_track_performance;

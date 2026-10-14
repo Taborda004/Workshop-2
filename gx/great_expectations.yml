@@ -81,41 +81,41 @@ data_docs_sites:
     site_index_builder:
       class_name: DefaultSiteIndexBuilder
 fluent_datasources:
-  spotify_raw_source:
+  spotify_raw_datasource:
     type: pandas
-    id: 5f177afe-5e0d-4f83-908a-bb7cff4b2895
+    id: e9ae9c3f-452d-4f77-9f6d-a1b92fbcb3b1
     assets:
       spotify_raw_asset:
         type: dataframe
-        id: 56710c7f-8066-4bb1-92b0-eb56f04414fb
+        id: b471c2f3-5b29-417d-8364-73c38069972f
         batch_metadata: {}
         batch_definitions:
-          spotify_raw_batch:
-            id: f9fb082d-2915-48c0-a72f-da663d5419b4
+          spotify_raw_batch_def:
+            id: a05ac03a-49c5-4ff0-bebc-0f5f95bf2e1e
             partitioner:
-  grammys_raw_source:
+  grammys_raw_datasource:
     type: pandas
-    id: a1840178-7edb-417d-994f-907eaee7f099
+    id: cf813615-a445-4c48-b9fa-d6569af85962
     assets:
       grammys_raw_asset:
         type: dataframe
-        id: 39f7e0dd-0220-471f-85f3-a3ccfe88336a
+        id: 3ebb9a5e-197e-4316-a15e-af96b5fe046a
         batch_metadata: {}
         batch_definitions:
-          grammys_raw_batch:
-            id: 33e9b702-969a-477e-b377-56094d9c80af
+          grammys_raw_batch_def:
+            id: 544e70f8-6e37-4c3c-bf0a-57f3df164ce0
             partitioner:
-  prepared_source:
+  prepared_datasource:
     type: pandas
-    id: eddf58f1-f2b9-4128-9cb8-b3ef3d4ad285
+    id: 01477dd6-45a4-411e-9c89-d55480ad17cf
     assets:
       prepared_asset:
         type: dataframe
-        id: a67b117e-88f2-4e25-bb3e-c634955dd331
+        id: 758b0f47-0198-4e4c-99b9-5ecb20a4a73f
         batch_metadata: {}
         batch_definitions:
-          prepared_batch:
-            id: 95e49755-74d8-4099-8494-b44bd6252498
+          prepared_batch_def:
+            id: 28764b58-8b1f-45c7-a56b-179508ddbf8c
             partitioner:
 analytics_enabled:
-data_context_id: c0809455-e96a-4ed1-acda-649ad4f451db
+data_context_id: 83d8a736-7586-4439-bd54-1018858cece8

@@ -1,0 +1,101 @@
+{
+  "expectations": [
+    {
+      "id": "3c5f72d5-762e-478d-b564-3c7261866108",
+      "kwargs": {
+        "column_list": [
+          "track_id",
+          "track_genre"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_compound_columns_to_be_unique"
+    },
+    {
+      "id": "4dbc4c7b-bb8f-4227-a6cb-36c9c6f6e3da",
+      "kwargs": {
+        "column": "artists"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "287c39d4-400e-4f2a-8afa-068925fb0f82",
+      "kwargs": {
+        "column": "track_name"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "c6963a7e-7302-4fd8-bc0c-67643b9a807f",
+      "kwargs": {
+        "column": "nomination_tier",
+        "value_set": [
+          "0",
+          "1-2",
+          "3-5",
+          "6-10",
+          ">10"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    },
+    {
+      "id": "c4630f06-e761-40cf-b087-afc788675aeb",
+      "kwargs": {
+        "column": "has_grammy",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    },
+    {
+      "id": "84d3178a-3b9f-4fc2-b6cb-9837091fb2d3",
+      "kwargs": {
+        "column": "is_high_popularity",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    },
+    {
+      "id": "8ed2d4f6-1e96-4b7e-aad6-a3734581aa33",
+      "kwargs": {
+        "column": "first_grammy_decade",
+        "value_set": [
+          "1950s",
+          "1960s",
+          "1970s",
+          "1980s",
+          "1990s",
+          "2000s",
+          "2010s",
+          "Sin Grammy"
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    }
+  ],
+  "id": "893755d0-725d-4880-afd2-86cceceebfb4",
+  "meta": {
+    "great_expectations_version": "1.24.0"
+  },
+  "name": "prepared_expectation_suite",
+  "notes": null
+}

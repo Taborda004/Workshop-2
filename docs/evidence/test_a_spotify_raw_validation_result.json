@@ -1,0 +1,142 @@
+{
+    "stage": "spotify_raw",
+    "timestamp": "2026-10-14T01:49:26.679356",
+    "total_rows_evaluated": 114000,
+    "overall_success": false,
+    "max_failure_severity": "FailureSeverity.WARNING",
+    "evaluated_expectations": 7,
+    "successful_expectations": 6,
+    "unsuccessful_expectations": 1,
+    "success_percent": 85.71428571428571,
+    "expectation_results": [
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "popularity",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "track_id",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "artists",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 1,
+                "unexpected_percent": 0.0008771929824561403,
+                "partial_unexpected_list": [
+                    null
+                ],
+                "partial_unexpected_counts": [
+                    {
+                        "value": null,
+                        "count": 1
+                    }
+                ],
+                "partial_unexpected_index_list": [
+                    65900
+                ]
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "danceability",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "energy",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "valence",
+            "success": true,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_between",
+            "column": "duration_ms",
+            "success": false,
+            "details": {
+                "element_count": 114000,
+                "unexpected_count": 1,
+                "unexpected_percent": 0.0008771929824561403,
+                "partial_unexpected_list": [
+                    0
+                ],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0008771929824561403,
+                "unexpected_percent_nonmissing": 0.0008771929824561403,
+                "partial_unexpected_counts": [
+                    {
+                        "value": 0,
+                        "count": 1
+                    }
+                ],
+                "partial_unexpected_index_list": [
+                    65900
+                ]
+            }
+        }
+    ]
+}

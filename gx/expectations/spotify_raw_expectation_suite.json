@@ -1,16 +1,7 @@
 {
   "expectations": [
     {
-      "id": "149f1116-a53e-403d-9ac4-9ae525733cc4",
-      "kwargs": {
-        "column": "track_id"
-      },
-      "meta": {},
-      "severity": "critical",
-      "type": "expect_column_values_to_not_be_null"
-    },
-    {
-      "id": "0dcc4036-2c96-4ebb-aa1f-fd505706ddd0",
+      "id": "1f9f7c5a-9c6a-4cdb-9505-7ecd477d253a",
       "kwargs": {
         "column": "popularity",
         "max_value": 100.0,
@@ -21,26 +12,26 @@
       "type": "expect_column_values_to_be_between"
     },
     {
-      "id": "a832f188-c6b5-4970-a7f9-2a8120f9bc41",
+      "id": "0fe13735-52b1-46f1-a92c-fa1d6ad287a5",
+      "kwargs": {
+        "column": "track_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "c405f49b-258e-4ddb-85c7-f9c397daeb53",
       "kwargs": {
         "column": "artists",
-        "mostly": 0.99
+        "mostly": 0.999
       },
       "meta": {},
-      "severity": "critical",
+      "severity": "warning",
       "type": "expect_column_values_to_not_be_null"
     },
     {
-      "id": "95fbbb97-a3d7-488b-8022-15d8c0740c13",
-      "kwargs": {
-        "column": "track_genre"
-      },
-      "meta": {},
-      "severity": "critical",
-      "type": "expect_column_values_to_not_be_null"
-    },
-    {
-      "id": "6a28f97d-ff4d-45a1-8e8d-e282c00bf60e",
+      "id": "896f4db0-a276-4755-b8d7-87706ab6217b",
       "kwargs": {
         "column": "danceability",
         "max_value": 1.0,
@@ -51,7 +42,7 @@
       "type": "expect_column_values_to_be_between"
     },
     {
-      "id": "35693aae-da1b-4ce5-aee9-bd89c6953b11",
+      "id": "c268ae45-09d2-46b7-9643-98e7968dd3cd",
       "kwargs": {
         "column": "energy",
         "max_value": 1.0,
@@ -62,39 +53,31 @@
       "type": "expect_column_values_to_be_between"
     },
     {
-      "id": "ee2498fc-ceca-46e0-8225-aa098b85cbcd",
+      "id": "87790169-6969-414b-a9e5-e6060e412a11",
       "kwargs": {
-        "column": "track_id"
+        "column": "valence",
+        "max_value": 1.0,
+        "min_value": 0.0
       },
       "meta": {},
-      "severity": "warning",
-      "type": "expect_column_values_to_be_unique"
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
     },
     {
-      "id": "467a8149-7faf-4bc4-a3a0-bc8774b217cb",
-      "kwargs": {
-        "column": "album_name",
-        "mostly": 0.99
-      },
-      "meta": {},
-      "severity": "warning",
-      "type": "expect_column_values_to_not_be_null"
-    },
-    {
-      "id": "a320b0e3-5ee9-48e6-a9e4-41fb42d6ed4a",
+      "id": "2f2e2176-2496-4a0d-9717-2da3239d4962",
       "kwargs": {
         "column": "duration_ms",
-        "min_value": 10000.0
+        "min_value": 1000.0
       },
       "meta": {},
       "severity": "warning",
       "type": "expect_column_values_to_be_between"
     }
   ],
-  "id": "1268ff0f-d1c6-42b2-8879-8c74cb3caf39",
+  "id": "1feed5d7-a747-4a2a-85e8-94b90ced0090",
   "meta": {
     "great_expectations_version": "1.24.0"
   },
-  "name": "spotify_raw_suite",
+  "name": "spotify_raw_expectation_suite",
   "notes": null
 }

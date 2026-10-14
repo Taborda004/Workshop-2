@@ -1,121 +1,126 @@
 """
-load_grammy_source.py — One-time script to load the Grammy Awards CSV
-into the MySQL source database.
+Source Preparation Script: Grammy Awards Relational Source Import
 
-This is SOURCE PREPARATION, not the final ETL load.
-Run this ONCE before triggering the Airflow DAG.
+Course: ETL (G01) - Universidad Autónoma de Occidente
+Workshop-2: Building a Reliable Batch Data Pipeline
 
-Usage (from the project root):
-    python scripts/load_grammy_source.py
-
-The script:
-1. Reads the_grammy_awards.csv from the local data directory.
-2. Normalises the winner column (True/False → 1/0).
-3. Inserts into grammy_source.grammy_awards_raw via SQLAlchemy.
-4. Generates reconciliation evidence in docs/evidence/grammy_source_reconciliation.json.
+IMPORTANT ARCHITECTURAL DISTINCTION (PDF Sections 4.3 and 6.2):
+Populating this table from the provided CSV constitutes SOURCE PREPARATION,
+establishing the operational relational database required for pipeline extraction.
+This is NOT the final ETL Load stage into the analytical Data Warehouse.
 """
 
-import json
 import os
 import sys
+import json
 from pathlib import Path
-
+from datetime import datetime
 import pandas as pd
-import sqlalchemy as sa
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(PROJECT_ROOT / ".env")
+# Load environment configuration
+load_dotenv()
 
-# Grammy CSV path resolution
-if (PROJECT_ROOT / "data" / "the_grammy_awards.csv").exists():
-    GRAMMY_CSV = PROJECT_ROOT / "data" / "the_grammy_awards.csv"
-else:
-    GRAMMY_CSV = PROJECT_ROOT / "the_grammy_awards.csv"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_PATH = BASE_DIR / "data" / "the_grammy_awards.csv"
+SQL_SETUP_PATH = BASE_DIR / "sql" / "source_setup.sql"
+EVIDENCE_PATH = BASE_DIR / "docs" / "evidence" / "grammy_source_reconciliation.json"
 
-EVIDENCE_DIR = PROJECT_ROOT / "docs" / "evidence"
-
-
-def get_source_engine() -> sa.engine.Engine:
-    host     = os.environ.get("MYSQL_SOURCE_HOST", "localhost")
-    port     = os.environ.get("MYSQL_SOURCE_PORT", "3306")
-    db       = os.environ.get("MYSQL_SOURCE_DB",   "grammy_source")
-    user     = os.environ.get("MYSQL_SOURCE_USER",     "etl_user")
-    password = os.environ.get("MYSQL_SOURCE_PASSWORD", "etl_pass")
-    url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{db}?charset=utf8mb4"
-    return sa.create_engine(url, pool_pre_ping=True)
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT", 3306))
+MYSQL_USER = os.getenv("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "1234")
+SOURCE_DB = os.getenv("GRAMMY_SOURCE_DB", "grammy_source")
 
 
-def load_grammy_source() -> dict:
-    print(f"Reading Grammy CSV: {GRAMMY_CSV}")
+def run_source_preparation():
+    print("=" * 70)
+    print("WORKSHOP-2: GRAMMY SOURCE PREPARATION (MySQL INGESTION)")
+    print("=" * 70)
+    print(f"Timestamp: {datetime.now().isoformat()}")
+    print(f"Source CSV Path: {DATA_PATH}")
+    print(f"Target Database: {SOURCE_DB} on {MYSQL_HOST}:{MYSQL_PORT}")
 
-    if not GRAMMY_CSV.exists():
-        print(f"ERROR: File not found: {GRAMMY_CSV}")
-        sys.exit(1)
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(f"Source file not found at: {DATA_PATH}")
 
-    df = pd.read_csv(GRAMMY_CSV, low_memory=False)
-    csv_rows = len(df)
-    print(f"CSV rows read: {csv_rows}")
+    # Read CSV
+    df = pd.read_csv(DATA_PATH)
+    csv_row_count = len(df)
+    print(f"[OK] Read {csv_row_count} rows from Grammy CSV.")
 
-    # Normalise columns
-    df["winner"] = df["winner"].map(
-        {True: 1, False: 0, "True": 1, "False": 0}
-    ).fillna(0).astype(int)
+    # Engine for server-level connection (to create DB if needed)
+    server_url = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/"
+    engine_server = create_engine(server_url, echo=False)
 
-    insert_cols = [
-        "year", "title", "published_at", "updated_at",
-        "category", "nominee", "artist", "workers", "img", "winner",
-    ]
-    df = df[[c for c in insert_cols if c in df.columns]]
+    # Execute DDL setup
+    print("[INFO] Executing sql/source_setup.sql...")
+    with open(SQL_SETUP_PATH, "r", encoding="utf-8") as f:
+        setup_sql = f.read()
 
-    engine = get_source_engine()
+    # Split and execute non-empty statements
+    statements = [stmt.strip() for stmt in setup_sql.split(";") if stmt.strip()]
+    with engine_server.connect() as conn:
+        for stmt in statements:
+            conn.execute(text(stmt))
+        conn.commit()
+    print("[OK] Source schema grammy_source and table grammy_awards_raw created.")
 
-    with engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE grammy_awards_raw"))
-        print("Existing rows cleared (TRUNCATE).")
+    # Convert winner to boolean
+    df["winner"] = df["winner"].astype(bool)
 
-        df.to_sql(
-            "grammy_awards_raw",
-            conn,
-            if_exists="append",
-            index=False,
-            method="multi",
-            chunksize=500,
-        )
+    # Insert into MySQL
+    db_url = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{SOURCE_DB}?charset=utf8mb4"
+    engine_db = create_engine(db_url, echo=False)
 
-    # Reconciliation check
-    with engine.connect() as conn:
-        result = conn.execute(
-            text("SELECT COUNT(*) AS n, SUM(winner) AS wins FROM grammy_awards_raw")
-        ).fetchone()
-        db_rows = result.n
-        wins = result.wins
-        match = bool(db_rows == csv_rows)
-        print(f"Source DB rows: {db_rows} | Winners: {wins} | Match: {match}")
+    print("[INFO] Loading Grammy records into grammy_source.grammy_awards_raw...")
+    df.to_sql(
+        name="grammy_awards_raw",
+        con=engine_db,
+        if_exists="append",
+        index=False,
+        chunksize=1000
+    )
+    print("[OK] Ingestion completed.")
 
-    summary = {
-        "source_file": str(GRAMMY_CSV.name),
-        "csv_rows_read": csv_rows,
-        "db_rows_inserted": db_rows,
-        "total_winners": int(wins),
-        "reconciliation_match": match,
-        "temporal_range": {
-            "min_year": int(df["year"].min()),
-            "max_year": int(df["year"].max()),
-        },
-        "target_table": "grammy_source.grammy_awards_raw",
-        "status": "SUCCESS" if match else "FAILED_RECONCILIATION",
+    # Reconcile counts via SELECT COUNT(*)
+    with engine_db.connect() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM grammy_awards_raw;"))
+        db_row_count = result.scalar()
+
+    print("-" * 70)
+    print(f"RECONCILIATION RESULT:")
+    print(f"  CSV Source Count:  {csv_row_count}")
+    print(f"  MySQL Table Count: {db_row_count}")
+    print(f"  Discrepancy:       {db_row_count - csv_row_count}")
+    print("-" * 70)
+
+    is_reconciled = (csv_row_count == db_row_count)
+    if not is_reconciled:
+        raise ValueError(f"Reconciliation failed! CSV ({csv_row_count}) != MySQL ({db_row_count})")
+
+    # Save evidence JSON
+    EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    evidence_data = {
+        "step": "grammy_source_preparation",
+        "timestamp": datetime.now().isoformat(),
+        "status": "SUCCESS",
+        "source_file": str(DATA_PATH),
+        "target_table": f"{SOURCE_DB}.grammy_awards_raw",
+        "csv_row_count": csv_row_count,
+        "mysql_row_count": db_row_count,
+        "reconciliation_passed": is_reconciled,
+        "verification_query": "SELECT COUNT(*) FROM grammy_source.grammy_awards_raw;",
+        "architectural_note": "Source preparation only. Establishes relational source for ETL extract_grammys task."
     }
 
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    evidence_path = EVIDENCE_DIR / "grammy_source_reconciliation.json"
-    with open(evidence_path, "w", encoding="utf-8") as fh:
-        json.dump(summary, fh, indent=2)
+    with open(EVIDENCE_PATH, "w", encoding="utf-8") as f:
+        json.dump(evidence_data, f, indent=4)
 
-    print(f"Grammy source load reconciliation evidence written → {evidence_path}")
-    return summary
+    print(f"[OK] Audit evidence saved to: {EVIDENCE_PATH}")
+    print("Source preparation successful! Pipeline can now extract from MySQL.")
 
 
 if __name__ == "__main__":
-    load_grammy_source()
+    run_source_preparation()

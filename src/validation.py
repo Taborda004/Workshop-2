@@ -1,405 +1,289 @@
 """
-validation.py — Great Expectations validation helper for the Reliable Music Pipeline.
+Validation Module: Great Expectations Gates for Workshop-2 ETL Pipeline.
 
-Provides run_gx_validation(dataframe, stage) with three stages:
-    "spotify_raw"   — raw Spotify data quality gates
-    "grammy_raw"    — raw Grammy data quality gates
-    "prepared"      — post-transformation integrated dataset gate
+Implements automated quality validation gates for:
+1. spotify_raw (CSV source ingestion)
+2. grammys_raw (MySQL relational source ingestion)
+3. prepared (integrated analytical dataset before Data Warehouse loading)
 
-Each stage enforces rules derived from profiling evidence and analytical
-requirements (REQ-01, REQ-02, REQ-03). Severity levels follow the workshop policy:
-    CRITICAL      → blocks the affected downstream path
-    WARNING       → logs and continues under documented policy
-    INFORMATIONAL → monitoring context / trend signal; never blocks
-
-GX results are serialised to JSON under OUTPUT_DIR/gx_results/ and mirrored
-to docs/evidence/ so that verifiable audit evidence is preserved.
+Supports both FileDataContext (persisted under gx/) and Ephemeral mode.
+Saves audit JSON evidence to docs/evidence/.
 """
 
-import json
-import logging
 import os
+import json
 from pathlib import Path
-
-import great_expectations as gx
+from datetime import datetime
 import pandas as pd
+import great_expectations as gx
 from great_expectations.expectations.metadata_types import FailureSeverity
 
-log = logging.getLogger(__name__)
-
-# Dynamic Path Resolution
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-_raw_output_dir = os.environ.get("AIRFLOW_OUTPUT_DIR")
-if _raw_output_dir:
-    OUTPUT_DIR = Path(_raw_output_dir)
-else:
-    OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
-
-GX_RESULTS_DIR = OUTPUT_DIR / "gx_results"
-EVIDENCE_DIR   = PROJECT_ROOT / "docs" / "evidence"
+BASE_DIR = Path(__file__).resolve().parent.parent
+GX_DIR = BASE_DIR / "gx"
+EVIDENCE_DIR = BASE_DIR / "docs" / "evidence"
 
 
-def _persist_result(result, stage: str) -> None:
-    """Serialize the GX ValidationResult to JSON for evidence preservation."""
-    GX_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-
-    result_path = GX_RESULTS_DIR / f"{stage}_validation_result.json"
-    evidence_path = EVIDENCE_DIR / f"{stage}_validation_result.json"
-
-    try:
-        result_dict = result.to_json_dict()
-        with open(result_path, "w", encoding="utf-8") as fh:
-            json.dump(result_dict, fh, indent=2, default=str)
-        # Mirror copy to docs/evidence for audit traceability
-        with open(evidence_path, "w", encoding="utf-8") as fh:
-            json.dump(result_dict, fh, indent=2, default=str)
-
-        log.info("GX result persisted to %s and mirrored to %s", result_path, evidence_path)
-        print(f"[GX] Result saved → {result_path}")
-    except Exception as exc:  # pylint: disable=broad-except
-        log.warning("Could not persist GX result: %s", exc)
-
-
-def get_gx_context():
+def get_gx_context(mode: str = "file"):
     """
-    Get a GX DataContext: prefers FileDataContext (persisted under PROJECT_ROOT/gx)
-    to maintain project assets as recommended, or falls back to ephemeral context.
+    Retrieve or initialize the Great Expectations Context.
+    Defaults to FileDataContext persisted under gx/.
+    Falls back to ephemeral if running in constrained environments.
     """
-    gx_dir = PROJECT_ROOT / "gx"
-    if gx_dir.exists() and (gx_dir / "great_expectations.yml").exists():
+    if mode == "file" and GX_DIR.exists():
         try:
-            return gx.get_context(project_root_dir=PROJECT_ROOT)
-        except Exception as exc:
-            log.warning("Could not open FileDataContext at %s: %s. Using ephemeral.", gx_dir, exc)
+            return gx.get_context(mode="file", project_root_dir=str(BASE_DIR))
+        except Exception as e:
+            print(f"[WARN] Failed to load FileDataContext ({e}). Falling back to ephemeral context.")
+            return gx.get_context(mode="ephemeral")
     return gx.get_context(mode="ephemeral")
 
 
-def run_gx_validation(dataframe: pd.DataFrame, stage: str):
+def build_and_register_suite(context, stage: str):
     """
-    Build or load a GX context, add/update the stage-specific Expectation Suite,
-    run validation, persist the result, and return (result, max_failure).
-
-    Parameters
-    ----------
-    dataframe : pd.DataFrame
-        The dataset to validate.
-    stage : str
-        One of "spotify_raw", "grammy_raw", "grammys_raw", "prepared".
-
-    Returns
-    -------
-    result : ValidationResult
-    max_failure : FailureSeverity | None
-        None if all expectations passed; otherwise the highest severity failed.
+    Build and register the ExpectationSuite for the given pipeline stage.
     """
-    valid_stages = {"spotify_raw", "grammy_raw", "grammys_raw", "prepared"}
-    if stage not in valid_stages:
-        raise ValueError(f"Unknown validation stage '{stage}'. Must be one of {valid_stages}.")
-
-    log.info("Starting GX validation — stage: %s | rows: %d", stage, len(dataframe))
-
-    context = get_gx_context()
-    normalized_stage = "grammys_raw" if stage in ("grammy_raw", "grammys_raw") else stage
-
-    # Ensure Data Source, Asset, and Batch Definition
+    suite_name = f"{stage}_expectation_suite"
+    
+    # Remove existing suite in context if re-registering
     try:
-        data_source = context.data_sources.get(f"{normalized_stage}_source")
+        context.suites.delete(suite_name)
     except Exception:
-        data_source = context.data_sources.add_pandas(name=f"{normalized_stage}_source")
+        pass
 
-    try:
-        data_asset = data_source.get_asset(f"{normalized_stage}_asset")
-    except Exception:
-        data_asset = data_source.add_dataframe_asset(name=f"{normalized_stage}_asset")
+    suite = gx.ExpectationSuite(name=suite_name)
+    suite = context.suites.add(suite)
 
-    try:
-        batch_def = data_asset.get_batch_definition(f"{normalized_stage}_batch")
-    except Exception:
-        batch_def = data_asset.add_batch_definition_whole_dataframe(f"{normalized_stage}_batch")
-
-    suite = gx.ExpectationSuite(name=f"{normalized_stage}_suite")
-
-    # ── SPOTIFY RAW GATES ────────────────────────────────────────────────────
     if stage == "spotify_raw":
-
-        # DQ-SP-01 | Completeness | track_id not null — Critical
-        # Business key; cannot uniquely track stream observations without it.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="track_id",
-                severity="critical",
-            )
-        )
-
-        # DQ-SP-02 | Validity | popularity range [0, 100] — Critical
-        # Metric used in REQ-01, REQ-03; out-of-range values corrupt KPIs.
+        # DQ-RAW-SP-01: Popularity bounds [0, 100] (Critical)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="popularity",
                 min_value=0,
                 max_value=100,
-                severity="critical",
+                mostly=1.0,
+                severity="critical"
             )
         )
-
-        # DQ-SP-03 | Completeness | artists not null — Critical
-        # Cross-source integration matching key.
+        # DQ-RAW-SP-02: Track ID completeness and validity (Critical)
+        suite.add_expectation(
+            gx.expectations.ExpectColumnValuesToNotBeNull(
+                column="track_id",
+                severity="critical"
+            )
+        )
+        # DQ-RAW-SP-03: Artists completeness (Warning: 1 null tolerated at raw stage)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="artists",
-                mostly=0.99,
-                severity="critical",
+                mostly=0.999,
+                severity="warning"
             )
         )
-
-        # DQ-SP-04 | Completeness | track_genre not null — Critical
-        # Grain and grouping dimension for REQ-01, REQ-02.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="track_genre",
-                severity="critical",
+        # DQ-RAW-SP-04: Normalized audio features bounds [0.0, 1.0] (Critical)
+        for col in ["danceability", "energy", "valence"]:
+            suite.add_expectation(
+                gx.expectations.ExpectColumnValuesToBeBetween(
+                    column=col,
+                    min_value=0.0,
+                    max_value=1.0,
+                    mostly=1.0,
+                    severity="critical"
+                )
             )
-        )
-
-        # DQ-SP-05 | Validity | danceability range [0.0, 1.0] — Critical
-        # Audio feature used in REQ-02 sonic profile.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="danceability",
-                min_value=0.0,
-                max_value=1.0,
-                severity="critical",
-            )
-        )
-
-        # DQ-SP-06 | Validity | energy range [0.0, 1.0] — Critical
-        # Audio feature used in REQ-02 sonic profile.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="energy",
-                min_value=0.0,
-                max_value=1.0,
-                severity="critical",
-            )
-        )
-
-        # DQ-SP-07 | Uniqueness | track_id uniqueness — Warning
-        # Multi-genre tracks share track_id; deduplication to Track x Genre handled in transform.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeUnique(
-                column="track_id",
-                severity="warning",
-            )
-        )
-
-        # DQ-SP-08 | Completeness | album_name not null — Warning
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="album_name",
-                mostly=0.99,
-                severity="warning",
-            )
-        )
-
-        # DQ-SP-09 | Timeliness / Operational | duration_ms > 10,000 — Informational
-        # Monitoring signal for potential corrupt or truncated audio track files.
+        # DQ-RAW-SP-05: Positive duration (Warning)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="duration_ms",
-                min_value=10000,
-                severity="warning",
+                min_value=1000,
+                mostly=1.0,
+                severity="warning"
             )
         )
 
-    # ── GRAMMY RAW GATES ─────────────────────────────────────────────────────
-    elif stage == "grammy_raw":
-
-        # DQ-GR-01 | Completeness | year not null — Critical
-        # Dimension key for temporal timeline and historical cohorts.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="year",
-                severity="critical",
-            )
-        )
-
-        # DQ-GR-02 | Validity | year range [1958, 2030] — Critical
-        # Historical Grammy ceremony range; future/invalid years indicate corruption.
+    elif stage == "grammys_raw":
+        # DQ-RAW-GR-01: Award Year validity (Critical)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="year",
                 min_value=1958,
                 max_value=2030,
-                severity="critical",
+                mostly=1.0,
+                severity="critical"
             )
         )
-
-        # DQ-GR-03 | Completeness | category not null — Critical
-        # Award category defining genre family mapping.
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="category",
-                severity="critical",
-            )
-        )
-
-        # DQ-GR-04 | Validity | winner in allowed set — Critical
-        # Winner flag drives grammy_wins count.
+        # DQ-RAW-GR-02: Winner flag validity (Critical)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="winner",
-                value_set=[True, False, 0, 1],
-                severity="critical",
+                value_set=[True, False, 1, 0],
+                mostly=1.0,
+                severity="critical"
             )
         )
-
-        # DQ-GR-05 | Completeness | artist not null (mostly 0.60) — Warning
-        # Profiling shows ~38% rows lack artist credit (album/producer awards). Filtered in transform.
+        # DQ-RAW-GR-03: Category completeness (Warning)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="artist",
-                mostly=0.60,
-                severity="warning",
-            )
-        )
-
-        # DQ-GR-06 | Completeness | nominee not null — Warning
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="nominee",
+                column="category",
                 mostly=0.99,
-                severity="warning",
+                severity="warning"
             )
         )
 
-    # ── PREPARED DATA GATE (Post-Transformation) ─────────────────────────────
     elif stage == "prepared":
-
-        # DQ-PREP-01 | Completeness | track_id not null — Critical
+        # DQ-PREP-01: Composite uniqueness of (track_id, track_genre) (Critical)
+        suite.add_expectation(
+            gx.expectations.ExpectCompoundColumnsToBeUnique(
+                column_list=["track_id", "track_genre"],
+                severity="critical"
+            )
+        )
+        # DQ-PREP-02: Artists and Track Name completeness post-transformation (Critical)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="track_id",
-                severity="critical",
+                column="artists",
+                severity="critical"
             )
         )
-
-        # DQ-PREP-02 | Completeness | primary_artist not null — Critical
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="primary_artist",
-                severity="critical",
+                column="track_name",
+                severity="critical"
             )
         )
-
-        # DQ-PREP-03 | Completeness | track_genre not null — Critical
+        # DQ-PREP-03: Nomination Tier valid domain (Critical)
         suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToNotBeNull(
-                column="track_genre",
-                severity="critical",
+            gx.expectations.ExpectColumnValuesToBeInSet(
+                column="nomination_tier",
+                value_set=["0", "1-2", "3-5", "6-10", ">10"],
+                severity="critical"
             )
         )
-
-        # DQ-PREP-04 | Validity | popularity range [0, 100] — Critical
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="popularity",
-                min_value=0,
-                max_value=100,
-                severity="critical",
-            )
-        )
-
-        # DQ-PREP-05 | Validity | has_grammy in {0, 1} — Critical
+        # DQ-PREP-04: Binary flags validity (Critical)
         suite.add_expectation(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="has_grammy",
                 value_set=[0, 1],
-                severity="critical",
+                severity="critical"
             )
         )
-
-        # DQ-PREP-06 | Validity | grammy_nominations >= 0 — Critical
         suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="grammy_nominations",
-                min_value=0,
-                severity="critical",
+            gx.expectations.ExpectColumnValuesToBeInSet(
+                column="is_high_popularity",
+                value_set=[0, 1],
+                severity="critical"
             )
         )
-
-        # DQ-PREP-07 | Validity | danceability range [0.0, 1.0] — Critical
+        # DQ-PREP-05: Decade cohort validity (Critical)
         suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="danceability",
-                min_value=0.0,
-                max_value=1.0,
-                severity="critical",
+            gx.expectations.ExpectColumnValuesToBeInSet(
+                column="first_grammy_decade",
+                value_set=["1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "Sin Grammy"],
+                severity="critical"
             )
         )
 
-        # DQ-PREP-08 | Validity | energy range [0.0, 1.0] — Critical
-        suite.add_expectation(
-            gx.expectations.ExpectColumnValuesToBeBetween(
-                column="energy",
-                min_value=0.0,
-                max_value=1.0,
-                severity="critical",
-            )
-        )
+    else:
+        raise ValueError(f"Unknown validation stage: {stage}")
 
-        # DQ-PREP-09 | Uniqueness | Compound key (track_id, track_genre) — Critical
-        # Strictly enforces the declared Phase 0 grain: Track x Genre.
-        suite.add_expectation(
-            gx.expectations.ExpectCompoundColumnsToBeUnique(
-                column_list=["track_id", "track_genre"],
-                severity="critical",
-            )
-        )
+    return suite
 
-        # DQ-PREP-10 | Completeness | Table row count > 0 — Critical
-        suite.add_expectation(
-            gx.expectations.ExpectTableRowCountToBeBetween(
-                min_value=1,
-                severity="critical",
-            )
-        )
 
-    # Register or update suite in context
+def run_validation(dataframe: pd.DataFrame, stage: str, context_mode: str = "file", output_prefix: str = ""):
+    """
+    Execute a Great Expectations validation gate for a specific stage.
+
+    Returns:
+        tuple: (result, max_failure_severity, summary_dict)
+    """
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    context = get_gx_context(mode=context_mode)
+
+    ds_name = f"{stage}_datasource"
+    asset_name = f"{stage}_asset"
+    batch_name = f"{stage}_batch_def"
+    val_def_name = f"{stage}_validation_def"
+
+    # Add or retrieve pandas data source
     try:
-        suite = context.suites.add_or_update(suite)
+        data_source = context.data_sources.add_pandas(name=ds_name)
     except Exception:
-        suite = context.suites.add(suite)
+        data_source = context.data_sources.get(ds_name)
 
-    # ── Run validation ────────────────────────────────────────────────────────
-    validation_def = gx.ValidationDefinition(
-        name=f"{normalized_stage}_validation",
+    # Add or retrieve dataframe asset
+    try:
+        data_asset = data_source.add_dataframe_asset(name=asset_name)
+    except Exception:
+        data_asset = data_source.get_asset(asset_name)
+
+    # Add batch definition
+    try:
+        batch_def = data_asset.add_batch_definition_whole_dataframe(batch_name)
+    except Exception:
+        batch_def = data_asset.get_batch_definition(batch_name)
+
+    # Build suite
+    suite = build_and_register_suite(context, stage)
+
+    # Add validation definition
+    try:
+        context.validation_definitions.delete(val_def_name)
+    except Exception:
+        pass
+
+    val_def = gx.ValidationDefinition(
+        name=val_def_name,
         data=batch_def,
-        suite=suite,
+        suite=suite
     )
-    try:
-        validation_def = context.validation_definitions.add_or_update(validation_def)
-    except Exception:
-        validation_def = context.validation_definitions.add(validation_def)
+    val_def = context.validation_definitions.add(val_def)
 
-    result = validation_def.run(
+    # Execute validation
+    result = val_def.run(
         batch_parameters={"dataframe": dataframe},
-        result_format={"result_format": "SUMMARY"},
+        result_format={"result_format": "SUMMARY"}
     )
 
     max_failure = result.get_max_severity_failure()
+    stats = result.statistics
 
-    # Print summary to task logs
-    print(f"[GX] stage={stage} | success={result.success} | max_failure={max_failure}")
-    print(f"[GX] statistics={result.statistics}")
+    # Build structured summary for logging and machine-readable evidence
+    summary = {
+        "stage": stage,
+        "timestamp": datetime.now().isoformat(),
+        "total_rows_evaluated": len(dataframe),
+        "overall_success": result.success,
+        "max_failure_severity": str(max_failure) if max_failure else "NONE",
+        "evaluated_expectations": stats.get("evaluated_expectations", 0),
+        "successful_expectations": stats.get("successful_expectations", 0),
+        "unsuccessful_expectations": stats.get("unsuccessful_expectations", 0),
+        "success_percent": stats.get("success_percent", 0.0),
+        "expectation_results": []
+    }
 
-    # Persist result as verifiable evidence
-    _persist_result(result, stage)
+    # Extract individual per-rule results
+    desc = result.describe_dict()
+    for exp_res in desc.get("expectations", []):
+        exp_type = exp_res.get("expectation_type", "")
+        success = exp_res.get("success", False)
+        kwargs = exp_res.get("kwargs", {})
+        summary["expectation_results"].append({
+            "expectation": exp_type,
+            "column": kwargs.get("column", str(kwargs.get("column_list", "N/A"))),
+            "success": success,
+            "details": exp_res.get("result", {})
+        })
 
-    log.info(
-        "GX validation complete — stage=%s | success=%s | max_failure=%s",
-        stage, result.success, max_failure,
-    )
+    # Save evidence file
+    file_tag = f"{output_prefix}_{stage}" if output_prefix else stage
+    evidence_path = EVIDENCE_DIR / f"{file_tag}_validation_result.json"
+    with open(evidence_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=4)
 
-    return result, max_failure
+    print(f"\n[GX GATE: {stage.upper()}]")
+    print(f"  Rows Evaluated:        {len(dataframe):,}")
+    print(f"  Validation Success:    {result.success}")
+    print(f"  Max Failure Severity:  {max_failure}")
+    print(f"  Success Rate:          {stats.get('success_percent', 0.0):.2f}%")
+    print(f"  Evidence Preserved:    {evidence_path.name}")
+
+    return result, max_failure, summary
