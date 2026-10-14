@@ -1,0 +1,74 @@
+{
+  "expectations": [
+    {
+      "id": "680ffad5-17ac-455e-9eed-47f7916c9154",
+      "kwargs": {
+        "column": "year"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "769ed4c6-131f-4370-851f-314644a5d7f1",
+      "kwargs": {
+        "column": "year",
+        "max_value": 2030.0,
+        "min_value": 1958.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "05df839a-4232-42fa-9123-f3bd6d5d2688",
+      "kwargs": {
+        "column": "category"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "4c80e105-8631-4f3c-ba45-016946ad5d95",
+      "kwargs": {
+        "column": "winner",
+        "value_set": [
+          true,
+          false,
+          0,
+          1
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    },
+    {
+      "id": "08a23317-e878-4bf4-bc45-6399c47caa6e",
+      "kwargs": {
+        "column": "artist",
+        "mostly": 0.6
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "d8cfe4bf-1902-4dc7-bf52-ee2a5e4e728e",
+      "kwargs": {
+        "column": "nominee",
+        "mostly": 0.99
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_not_be_null"
+    }
+  ],
+  "id": "a2623b69-6796-494b-8249-3c56fd23cba3",
+  "meta": {
+    "great_expectations_version": "1.24.0"
+  },
+  "name": "grammys_raw_suite",
+  "notes": null
+}

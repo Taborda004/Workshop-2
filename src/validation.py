@@ -62,9 +62,23 @@ def _persist_result(result, stage: str) -> None:
         log.warning("Could not persist GX result: %s", exc)
 
 
+def get_gx_context():
+    """
+    Get a GX DataContext: prefers FileDataContext (persisted under PROJECT_ROOT/gx)
+    to maintain project assets as recommended, or falls back to ephemeral context.
+    """
+    gx_dir = PROJECT_ROOT / "gx"
+    if gx_dir.exists() and (gx_dir / "great_expectations.yml").exists():
+        try:
+            return gx.get_context(project_root_dir=PROJECT_ROOT)
+        except Exception as exc:
+            log.warning("Could not open FileDataContext at %s: %s. Using ephemeral.", gx_dir, exc)
+    return gx.get_context(mode="ephemeral")
+
+
 def run_gx_validation(dataframe: pd.DataFrame, stage: str):
     """
-    Build an ephemeral GX context, add the stage-specific Expectation Suite,
+    Build or load a GX context, add/update the stage-specific Expectation Suite,
     run validation, persist the result, and return (result, max_failure).
 
     Parameters
@@ -72,7 +86,7 @@ def run_gx_validation(dataframe: pd.DataFrame, stage: str):
     dataframe : pd.DataFrame
         The dataset to validate.
     stage : str
-        One of "spotify_raw", "grammy_raw", "prepared".
+        One of "spotify_raw", "grammy_raw", "grammys_raw", "prepared".
 
     Returns
     -------
@@ -80,20 +94,32 @@ def run_gx_validation(dataframe: pd.DataFrame, stage: str):
     max_failure : FailureSeverity | None
         None if all expectations passed; otherwise the highest severity failed.
     """
-    valid_stages = {"spotify_raw", "grammy_raw", "prepared"}
+    valid_stages = {"spotify_raw", "grammy_raw", "grammys_raw", "prepared"}
     if stage not in valid_stages:
         raise ValueError(f"Unknown validation stage '{stage}'. Must be one of {valid_stages}.")
 
     log.info("Starting GX validation — stage: %s | rows: %d", stage, len(dataframe))
 
-    context = gx.get_context(mode="ephemeral")
+    context = get_gx_context()
+    normalized_stage = "grammys_raw" if stage in ("grammy_raw", "grammys_raw") else stage
 
-    data_source = context.data_sources.add_pandas(name=f"{stage}_source")
-    data_asset  = data_source.add_dataframe_asset(name=f"{stage}_asset")
-    batch_def   = data_asset.add_batch_definition_whole_dataframe(f"{stage}_batch")
+    # Ensure Data Source, Asset, and Batch Definition
+    try:
+        data_source = context.data_sources.get(f"{normalized_stage}_source")
+    except Exception:
+        data_source = context.data_sources.add_pandas(name=f"{normalized_stage}_source")
 
-    suite = gx.ExpectationSuite(name=f"{stage}_suite")
-    suite = context.suites.add(suite)
+    try:
+        data_asset = data_source.get_asset(f"{normalized_stage}_asset")
+    except Exception:
+        data_asset = data_source.add_dataframe_asset(name=f"{normalized_stage}_asset")
+
+    try:
+        batch_def = data_asset.get_batch_definition(f"{normalized_stage}_batch")
+    except Exception:
+        batch_def = data_asset.add_batch_definition_whole_dataframe(f"{normalized_stage}_batch")
+
+    suite = gx.ExpectationSuite(name=f"{normalized_stage}_suite")
 
     # ── SPOTIFY RAW GATES ────────────────────────────────────────────────────
     if stage == "spotify_raw":
@@ -340,13 +366,22 @@ def run_gx_validation(dataframe: pd.DataFrame, stage: str):
             )
         )
 
+    # Register or update suite in context
+    try:
+        suite = context.suites.add_or_update(suite)
+    except Exception:
+        suite = context.suites.add(suite)
+
     # ── Run validation ────────────────────────────────────────────────────────
     validation_def = gx.ValidationDefinition(
-        name=f"{stage}_validation",
+        name=f"{normalized_stage}_validation",
         data=batch_def,
         suite=suite,
     )
-    validation_def = context.validation_definitions.add(validation_def)
+    try:
+        validation_def = context.validation_definitions.add_or_update(validation_def)
+    except Exception:
+        validation_def = context.validation_definitions.add(validation_def)
 
     result = validation_def.run(
         batch_parameters={"dataframe": dataframe},

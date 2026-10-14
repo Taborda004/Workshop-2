@@ -1,0 +1,100 @@
+{
+  "expectations": [
+    {
+      "id": "149f1116-a53e-403d-9ac4-9ae525733cc4",
+      "kwargs": {
+        "column": "track_id"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "0dcc4036-2c96-4ebb-aa1f-fd505706ddd0",
+      "kwargs": {
+        "column": "popularity",
+        "max_value": 100.0,
+        "min_value": 0.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "a832f188-c6b5-4970-a7f9-2a8120f9bc41",
+      "kwargs": {
+        "column": "artists",
+        "mostly": 0.99
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "95fbbb97-a3d7-488b-8022-15d8c0740c13",
+      "kwargs": {
+        "column": "track_genre"
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "6a28f97d-ff4d-45a1-8e8d-e282c00bf60e",
+      "kwargs": {
+        "column": "danceability",
+        "max_value": 1.0,
+        "min_value": 0.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "35693aae-da1b-4ce5-aee9-bd89c6953b11",
+      "kwargs": {
+        "column": "energy",
+        "max_value": 1.0,
+        "min_value": 0.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "ee2498fc-ceca-46e0-8225-aa098b85cbcd",
+      "kwargs": {
+        "column": "track_id"
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_be_unique"
+    },
+    {
+      "id": "467a8149-7faf-4bc4-a3a0-bc8774b217cb",
+      "kwargs": {
+        "column": "album_name",
+        "mostly": 0.99
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "a320b0e3-5ee9-48e6-a9e4-41fb42d6ed4a",
+      "kwargs": {
+        "column": "duration_ms",
+        "min_value": 10000.0
+      },
+      "meta": {},
+      "severity": "warning",
+      "type": "expect_column_values_to_be_between"
+    }
+  ],
+  "id": "1268ff0f-d1c6-42b2-8879-8c74cb3caf39",
+  "meta": {
+    "great_expectations_version": "1.24.0"
+  },
+  "name": "spotify_raw_suite",
+  "notes": null
+}

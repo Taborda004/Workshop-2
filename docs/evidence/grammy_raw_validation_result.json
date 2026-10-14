@@ -6,11 +6,11 @@
       "expectation_config": {
         "type": "expect_column_values_to_not_be_null",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "year"
         },
         "meta": {},
-        "id": "32ed9bd6-cc2d-44ea-8d32-3edf6a7e7907",
+        "id": "680ffad5-17ac-455e-9eed-47f7916c9154",
         "severity": "critical"
       },
       "result": {
@@ -33,13 +33,13 @@
       "expectation_config": {
         "type": "expect_column_values_to_be_between",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "year",
           "min_value": 1958.0,
           "max_value": 2030.0
         },
         "meta": {},
-        "id": "d3fd798c-82a9-4756-8125-575862fa8882",
+        "id": "769ed4c6-131f-4370-851f-314644a5d7f1",
         "severity": "critical"
       },
       "result": {
@@ -66,11 +66,11 @@
       "expectation_config": {
         "type": "expect_column_values_to_not_be_null",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "category"
         },
         "meta": {},
-        "id": "1d0169fc-1763-429b-9fd5-858210dbbf03",
+        "id": "05df839a-4232-42fa-9123-f3bd6d5d2688",
         "severity": "critical"
       },
       "result": {
@@ -93,7 +93,7 @@
       "expectation_config": {
         "type": "expect_column_values_to_be_in_set",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "winner",
           "value_set": [
             true,
@@ -103,7 +103,7 @@
           ]
         },
         "meta": {},
-        "id": "58581f2c-7c0b-4e9d-b22d-42f8df29f383",
+        "id": "4c80e105-8631-4f3c-ba45-016946ad5d95",
         "severity": "critical"
       },
       "result": {
@@ -130,12 +130,12 @@
       "expectation_config": {
         "type": "expect_column_values_to_not_be_null",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "artist",
           "mostly": 0.6
         },
         "meta": {},
-        "id": "0d82b458-d78d-49ed-9b09-73e20c906cc1",
+        "id": "08a23317-e878-4bf4-bc45-6399c47caa6e",
         "severity": "warning"
       },
       "result": {
@@ -205,12 +205,12 @@
       "expectation_config": {
         "type": "expect_column_values_to_not_be_null",
         "kwargs": {
-          "batch_id": "grammy_raw_source-grammy_raw_asset",
+          "batch_id": "grammys_raw_source-grammys_raw_asset",
           "column": "nominee",
           "mostly": 0.99
         },
         "meta": {},
-        "id": "41a9d315-6bf8-439e-8665-2ea9ae07d27a",
+        "id": "d8cfe4bf-1902-4dc7-bf52-ee2a5e4e728e",
         "severity": "warning"
       },
       "result": {
@@ -248,7 +248,7 @@
       }
     }
   ],
-  "suite_name": "grammy_raw_suite",
+  "suite_name": "grammys_raw_suite",
   "suite_parameters": {},
   "statistics": {
     "evaluated_expectations": 6,
@@ -262,24 +262,24 @@
       "batch_data": "PandasDataFrame"
     },
     "batch_markers": {
-      "ge_load_time": "20261014T042811.011666Z",
-      "pandas_data_fingerprint": "ab1710756ecbd2357ec766a164b19f27"
+      "ge_load_time": "20261014T052709.417552Z",
+      "pandas_data_fingerprint": "9fad5783dc5e326266bf9e51365efd26"
     },
     "active_batch_definition": {
-      "datasource_name": "grammy_raw_source",
+      "datasource_name": "grammys_raw_source",
       "data_connector_name": "fluent",
-      "data_asset_name": "grammy_raw_asset",
+      "data_asset_name": "grammys_raw_asset",
       "batch_identifiers": {
         "dataframe": "<DATAFRAME>"
       }
     },
-    "validation_id": "ceac3b87-40ea-4f4e-9a86-23c6c53a13bd",
+    "validation_id": "ab930469-a233-4dfd-a7a8-c97a51eacf4b",
     "checkpoint_id": null,
     "run_id": {
       "run_name": null,
-      "run_time": "2026-10-13T23:28:11.072806-05:00"
+      "run_time": "2026-10-14T00:27:09.517890-05:00"
     },
-    "validation_time": "2026-10-14T04:28:11.072806+00:00",
+    "validation_time": "2026-10-14T05:27:09.517890+00:00",
     "batch_parameters": {
       "dataframe": "<DATAFRAME>"
     }
