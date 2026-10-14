@@ -28,7 +28,7 @@ validate_spotify_raw   validate_grammys_raw
               ↓
            load_dw
               ↓
-        DATA WAREHOUSE (MySQL music_dw)
+        DATA WAREHOUSE (MySQL spotify_grammy_dw)
               ↓
        KPIs / Power BI Dashboard
 
@@ -38,10 +38,10 @@ Reliability Controls
 • One prepared validation gate (Critical blocks load).
 • Selective retries: transient network/DB tasks retry 3×; pure
   computation tasks do not retry (deterministic output).
-• Safe rerun: TRUNCATE + INSERT strategy — rerun cannot silently
+• Safe rerun: Transactional DELETE + INSERT strategy inside atomic transaction — rerun cannot silently
   accumulate duplicates in the DW.
-• Failure evidence: GX results serialised to JSON in output/gx_results/.
-• Load evidence: load_summary.json in output/.
+• Failure evidence: GX results serialised to JSON in output/gx_results/ and docs/evidence/.
+• Load evidence: load_summary.json in output/ and docs/evidence/.
 
 Inter-task communication: FILE PATHS only (Parquet files under
 /opt/airflow/data/work). DataFrames are never passed through the
@@ -270,9 +270,9 @@ def reliable_music_pipeline():
     )
     def load_dw_task(prepared_path: str) -> dict:
         """
-        Load validated prepared data into the MySQL music_dw star schema.
+        Load validated prepared data into the MySQL spotify_grammy_dw star schema.
 
-        Safe-rerun strategy: TRUNCATE + INSERT.
+        Safe-rerun strategy: Transactional DELETE + INSERT within atomic engine.begin().
         Returns a load summary dict with row counts.
         """
         from load import load_to_dw
