@@ -46,3 +46,6 @@ venv/
 .idea/
 .vscode/
 *.swp
+
+# Reference in-class practice file
+reliable_pipeline.py
