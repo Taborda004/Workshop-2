@@ -1,0 +1,15 @@
+{
+  "source_file": "the_grammy_awards.csv",
+  "csv_rows_read": 4810,
+  "db_target_table": "grammy_source.grammy_awards_raw",
+  "db_rows_expected": 4810,
+  "db_rows_reconciled": 4810,
+  "reconciliation_match": true,
+  "unique_years": 62,
+  "min_year": 1958,
+  "max_year": 2019,
+  "unique_categories": 638,
+  "total_awards_awarded": 4810,
+  "status": "SOURCE_PREPARATION_RECONCILED",
+  "timestamp": "2026-10-14T00:30:00Z"
+}
