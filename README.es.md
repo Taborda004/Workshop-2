@@ -472,13 +472,15 @@ erDiagram
 4. **Manejo de Registro Centinela en Fechas:** Para pistas sin reconocimiento Grammy (103,562 registros), `date_key` apunta al registro centinela **`9999`** en `dim_date` (`year = 9999`, `decade_name = 'Sin Grammy'`), preservando una integridad referencial estricta sin permitir claves foráneas nulas.
 5. **Dimensiones de Cambio Lento (SCD):** Configurado bajo **SCD Tipo 1 (Sobrescritura con Timestamp de Lote)**, asegurando que los reconocimientos acumulados reflejen el estado consolidado de los artistas.
 
-### Vistas Analíticas Certificadas
+### Arquitectura del Esquema en Estrella Kimball
 
-El esquema del Data Warehouse ([`sql/dw_schema.sql`](sql/dw_schema.sql)) expone 4 vistas analíticas certificadas:
-* **`v_kpi_r1_grammy_vs_popularity`:** Pre-agrega popularidad promedio, volumen y lift por nivel de nominación para REQ-01.
-* **`v_kpi_r1_genre_popularity_lift`:** Calcula el lift de popularidad por género musical, identificando los géneros más impactados.
-* **`v_kpi_r2_audio_features_by_grammy_genre`:** Computa el promedio de las 9 dimensiones acústicas comparando temas Grammy vs. catálogo general.
-* **`v_kpi_r3_historical_cohorts_performance`:** Agrega volumen de pistas, conteos de alta popularidad ($\ge 50.0$), $HPS$ y el Índice de Persistencia Cultural ($CPI$) por década histórica.
+El esquema del Data Warehouse ([`sql/dw_schema.sql`](sql/dw_schema.sql)) implementa un Esquema en Estrella puro sin vistas intermedias pre-agregadas:
+* **`fact_track_performance`:** 113,549 registros de hechos con métricas de popularidad, duración, explicit y 9 dimensiones acústicas al grano de pista $	imes$ género.
+* **`dim_artist`:** Dimensión conforme de artista con victorias, nominaciones y nivel de nominación acumulado (`0`, `1-2`, `3-5`, `6-10`, `>10`).
+* **`dim_genre`:** Dimensión de género musical que permite análisis comparativos de lift.
+* **`dim_date`:** Dimensión temporal de año y década histórica para seguimiento de persistencia de cohortes.
+
+Todos los requisitos analíticos (REQ-01, REQ-02, REQ-03) se calculan dinámicamente en Power BI mediante medidas de negocio DAX evaluadas sobre las relaciones del modelo dimensional.
 
 ---
 
@@ -717,38 +719,39 @@ El script de auditoría ([`scripts/run_test_c.py`](scripts/run_test_c.py)) ejecu
 
 ## 15. Dashboard and Analytical Outputs
 
-La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse dimensional (`spotify_grammy_dw`) en MySQL 8.0 vía **DirectQuery** sobre el puerto 3306.
+La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse dimensional (`spotify_grammy_dw`) en MySQL 8.0 sobre el puerto 3306.
 
 ### Arquitectura del Tablero en Power BI
-* **Modo de Conexión:** DirectQuery a servidor MySQL (`localhost:3306`).
-* **Origen de Datos:** Vistas relacionales certificadas (`v_kpi_r1_grammy_vs_popularity`, `v_kpi_r1_genre_popularity_lift`, `v_kpi_r2_audio_features_by_grammy_genre`, `v_kpi_r3_historical_cohorts_performance`).
-* **Entrega Analítica:** Visualizaciones interactivas de nivel ejecutivo resolviendo REQ-01, REQ-02 y REQ-03 con empuje de consultas SQL en tiempo real.
+* **Modo de Conexión:** Conexión directa al Esquema en Estrella en MySQL (`localhost:3306`, base de datos `spotify_grammy_dw`).
+* **Orígenes de Datos (Modelo Kimball):** `fact_track_performance`, `dim_artist`, `dim_genre`, `dim_date`.
+* **Motor de Cálculo:** Medidas dinámicas DAX (sin vistas intermedias pre-agregadas; las medidas se evalúan dinámicamente sobre el grano de la tabla de hechos).
+* **Entrega Analítica:** Visualizaciones interactivas de nivel ejecutivo resolviendo REQ-01, REQ-02 y REQ-03.
 
 ```
 +----------------------------------------------------------------------------------------------------+
 |                                    ACTIVOS DEL TABLERO EN POWER BI                                 |
 +--------------------------+-------------------------------------+-----------------------------------+
-| Identificador de Visual | Vista SQL Certificada Objetivo      | Formato Visual en Power BI        |
+| Identificador de Visual | Elementos DW y Medida DAX           | Formato Visual en Power BI        |
 +--------------------------+-------------------------------------+-----------------------------------+
-| **REQ-01: Lift por Tier**| `v_kpi_r1_grammy_vs_popularity`     | Gráfico de Barras / Columnas      |
-| **REQ-01: Lift Género**  | `v_kpi_r1_genre_popularity_lift`    | Gráfico de Barras Clasificadas    |
-| **REQ-02: ADN Acústico** | `v_kpi_r2_audio_features_by_...`    | Gráfico de Radar / Barras Grupo   |
-| **REQ-03: Longevidad**   | `v_kpi_r3_historical_cohorts_...`   | Gráfico Mixto Columnas y Líneas   |
+| **REQ-01: Lift por Tier**| `dim_artist` + `[Promedio_Pop]`     | Gráfico de Barras / Columnas      |
+| **REQ-01: Lift Género**  | `dim_genre` + `[Avg_Pop_Grammy]`    | Gráfico de Barras Clasificadas    |
+| **REQ-02: ADN Acústico** | `fact` + Medidas DAX Acústicas      | Gráfico de Barras Agrupadas       |
+| **REQ-03: Longevidad**   | `dim_date` + `[CPI_Persistence]`    | Gráfico Mixto Columnas y Líneas   |
 +--------------------------+-------------------------------------+-----------------------------------+
 ```
 
 ### Visual 1: Reconocimiento Grammy vs. Incremento en Popularidad (REQ-01)
-* **Vista SQL Subyacente:** `v_kpi_r1_grammy_vs_popularity`
+* **Mapeo en Data Warehouse:** `dim_artist.nomination_tier` $	imes$ DAX `[Promedio_Popularidad]`
 * **Afirmación (Claim):** El prestigio institucional produce un incremento monótono en la popularidad de streaming.
 * **Interpretación Técnica:** Pistas sin nominaciones promedian **28.8%** de popularidad. Con 1-2 nominaciones suben a **33.7%**, con 3-5 alcanzan **40.1%**, con 6-10 llegan a **45.6%**, y con $>10$ escalan a **52.8%** (+24.0 puntos netos de lift). Géneros como Pop, Dance y Rock presentan incrementos superiores a **+15.0 puntos**.
 
 ### Visual 2: Perfil Acústico de 9 Dimensiones (REQ-02)
-* **Vista SQL Subyacente:** `v_kpi_r2_audio_features_by_grammy_genre`
+* **Mapeo en Data Warehouse:** `dim_genre.genre_name` $	imes$ DAX `[Promedio_Energia]`, `[Promedio_Acustica]`, `[Promedio_Bailabilidad]`
 * **Afirmación (Claim):** Las pistas galardonadas presentan una firma sonora definida por mayor energía, mayor volumen y notablemente menor presencia acústica.
 * **Interpretación Técnica:** La comparación vectorial de centroides demuestra que los temas con Grammy promedian **0.69** en energía (frente a 0.61 control) y **-6.2 dB** en loudness (frente a -8.4 dB control), mientras que la acústica baja de **0.28** en control a **0.16** en temas galardonados. Esto prueba empíricamente la preferencia de la Academia por producciones de estudio de alta potencia dinámica.
 
 ### Visual 3: Longevidad Histórica y Persistencia de Relevancia Cultural (REQ-03)
-* **Vista SQL Subyacente:** `v_kpi_r3_historical_cohorts_performance`
+* **Mapeo en Data Warehouse:** `dim_date.decade` $	imes$ DAX `[Cohort_Persistence_Index]` ($CPI$)
 * **Afirmación (Claim):** Las cohortes históricas de Grammys sostienen un Índice de Persistencia Cultural ($CPI$) superior a $2.0	imes$ frente al catálogo general de la época.
 * **Interpretación Técnica:** El percentil 75 empírico ($P_{75} = 50.0$) evidencia que el **57.93%** de las pistas de artistas premiados en los años 60 se ubican hoy en el segmento de alta popularidad, frente a solo el **24.31%** del catálogo no nominado de esa década. Esto representa un **multiplicador $CPI$ de $2.01	imes$**, demostrando que los galardones identifican activos culturales con enorme valor a largo plazo.
 

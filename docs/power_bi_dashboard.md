@@ -6,6 +6,7 @@
 #### Strict Compliance Rule (PDF Section 8.1)
 * **Assessed Connection:** Power BI connects exclusively and directly to the dimensional Data Warehouse in **MySQL 8.0 (`spotify_grammy_dw`)**.
 * **Direct CSV Connections:** Strictly prohibited. Connecting Power BI directly to `spotify_dataset.csv` or `the_grammy_awards.csv` is rejected as an invalid engineering solution.
+* **No Pre-Calculated Views:** Power BI connects directly to the Kimball Star Schema (`fact_track_performance`, `dim_artist`, `dim_genre`, `dim_date`). All business measures, averages, lifts, and persistence indexes are dynamically computed using DAX.
 * **Connection String:**
   * **Server:** `localhost:3306` (or `host.docker.internal:3306` when running within containerized gateways).
   * **Database:** `spotify_grammy_dw`
@@ -77,13 +78,15 @@ erDiagram
 
 | Analytical Requirement | DW Element / Query | KPI / Visualization |
 | :--- | :--- | :--- |
-| **REQ-01: Impacto de Grammy en Popularidad** | Vista `v_kpi_r1_grammy_vs_popularity` y Vista `v_kpi_r1_genre_popularity_lift` | **1. KPI Card:** Popularity Lift Global ($+12.4$ pts).<br>**2. Visual:** Gráfico combinado de barras y líneas (*Popularity and High-Popularity Share by Nomination Tier*).<br>**3. Visual:** Gráfico de barras horizontales (*Top Genres with Popularity Lift $>+15$ pts*). |
-| **REQ-02: Características Musicales Predominantes (ADN Sonoro)** | Vista `v_kpi_r2_audio_features_by_grammy_genre` | **1. KPI Card:** Average Danceability Differential ($+0.05$ / Studio Polish Index).<br>**2. Visual:** Gráfico de Radar Polar de 9 dimensiones acústicas (*Acoustic DNA Radar: Grammy vs Comparison Group*). |
-| **REQ-03: Persistencia Histórica de Popularidad frente a Grupo Control** | Vista `v_kpi_r3_historical_cohorts_performance` | **1. KPI Card:** Cohort Persistence Index Máximo ($2.01\times$ en cohorte 1960s vs Control).<br>**2. Visual:** Gráfico de barras y líneas (*Historical Grammy Cohorts High Popularity Share $HPS_{P75}$ & $CPI$*). |
+| **REQ-01: Impacto de Grammy en Popularidad** | Star Schema: `fact_track_performance` $\bowtie$ `dim_artist` + DAX `[Promedio_Popularidad]` | **1. KPI Card:** Popularity Lift Global ($+12.4$ pts).<br>**2. Visual:** Gráfico combinado de barras (*Popularity by Nomination Tier*).<br>**3. Visual:** Gráfico de barras horizontales (*Top Genres with Popularity Lift $>+15$ pts*). |
+| **REQ-02: Características Musicales Predominantes (ADN Sonoro)** | Star Schema: `fact_track_performance` $\bowtie$ `dim_genre` + DAX `[Promedio_Energia]`, `[Promedio_Acustica]` | **1. KPI Card:** Average Danceability Differential ($+0.05$ / Studio Polish Index).<br>**2. Visual:** Gráfico de barras agrupadas de 9 dimensiones acústicas (*Acoustic DNA: Grammy vs Comparison Group*). |
+| **REQ-03: Persistencia Histórica de Popularidad frente a Grupo Control** | Star Schema: `fact_track_performance` $\bowtie$ `dim_artist` $\bowtie$ `dim_date` + DAX `[Cohort_Persistence_Index]` | **1. KPI Card:** Cohort Persistence Index Máximo ($2.01\times$ en cohorte 1960s vs Control).<br>**2. Visual:** Gráfico de líneas y columnas (*Historical Grammy Cohorts High Popularity Share $HPS_{P75}$ & $CPI$*). |
 
 ---
 
 ### 4. DAX Business Measures Specification
+
+All calculations are evaluated on the fly directly in Power BI over the 113,549 fact records:
 
 ```dax
 // 1. High Popularity Share (P75 Threshold >= 50.0)
@@ -122,6 +125,13 @@ VAR ControlGroupHPS =
     )
 RETURN
     DIVIDE(CurrentCohortHPS, ControlGroupHPS, 0)
+
+// 6. Acoustic DNA Measures
+Avg_Energy = AVERAGE(fact_track_performance[energy])
+Avg_Acousticness = AVERAGE(fact_track_performance[acousticness])
+Avg_Danceability = AVERAGE(fact_track_performance[danceability])
+Avg_Loudness = AVERAGE(fact_track_performance[loudness])
+Avg_Valence = AVERAGE(fact_track_performance[valence])
 ```
 
 ---
@@ -129,37 +139,25 @@ RETURN
 ### 5. Detailed Analytical Insights & Visual Evidence
 
 #### 5.1 REQ-01: Grammy Impact and Cumulative Tier Progression
-* **Empirical Evidence:** As illustrated in `docs/evidence/kpi_r1_popularity_lift_by_tier.png`, tracks belonging to artists with higher Grammy nomination tiers exhibit a **strict monotonic progression** in high-popularity share:
+* **Empirical Evidence:** Tracks belonging to artists with higher Grammy nomination tiers exhibit a **strict monotonic progression** in high-popularity share:
   * Tier `0` (Unrecognized): $28.78\%$
   * Tier `1-2` (Emerging Honorees): $36.23\%$
   * Tier `3-5` (Established Artists): $42.94\%$
   * Tier `6-10` (Industry Icons): $52.77\%$
-* **Commercial Genre Lift:** `docs/evidence/kpi_r1_genre_lift.png` proves that commercial genres experience massive lifts exceeding $+15.0$ and $+20.0$ points (e.g. *Rockabilly* $+23.9$ pts, *Rock-n-Roll* $+20.1$ pts, *Swedish Pop* $+19.8$ pts, *Psych-Rock* $+19.0$ pts).
-
-![REQ-01 Popularity Lift by Tier](evidence/kpi_r1_popularity_lift_by_tier.png)
-*Figure 5.1: High Popularity Share and Average Popularity across Grammy nomination tiers.*
-
-![REQ-01 Genre Popularity Lift](evidence/kpi_r1_genre_lift.png)
-*Figure 5.2: Top musical genres exhibiting popularity lifts exceeding the +15 point engineering threshold.*
+* **Commercial Genre Lift:** Commercial genres experience massive lifts exceeding $+15.0$ and $+20.0$ points (e.g. *Rockabilly* $+23.9$ pts, *Rock-n-Roll* $+20.1$ pts, *Swedish Pop* $+19.8$ pts, *Psych-Rock* $+19.0$ pts).
 
 ---
 
 #### 5.2 REQ-02: Acoustic DNA Profile (The 9 Musical Dimensions)
-* **Empirical Evidence:** As verified in `docs/evidence/kpi_r2_radar_audio_features.png`, tracks by Grammy-honored artists demonstrate a characteristic **"Studio Polish" Acoustic DNA**:
+* **Empirical Evidence:** Tracks by Grammy-honored artists demonstrate a characteristic **"Studio Polish" Acoustic DNA**:
   * Higher danceability ($0.57$ vs $0.56$).
   * Lower acousticness ($0.31$ vs $0.34$) and lower raw liveness ($0.19$ vs $0.21$), confirming greater prevalence of multi-track studio engineering over unproduced live/acoustic takes.
-
-![REQ-02 Acoustic DNA Radar Profile](evidence/kpi_r2_radar_audio_features.png)
-*Figure 5.3: 9-dimensional acoustic radar profile contrasting academy-recognized music against the control catalog.*
 
 ---
 
 #### 5.3 REQ-03: Historical Cohort Persistence & Cohort Persistence Index (CPI)
-* **Empirical Evidence:** As detailed in `docs/evidence/kpi_r3_historical_cohorts_cpi.png`:
+* **Empirical Evidence:**
   * The control group (`Sin Grammy`) exhibits an $HPS_{P75}$ of $24.31\%$.
   * The historical **1960s Grammy Cohort** (e.g. The Beatles, Ella Fitzgerald) achieves an astounding $HPS_{P75}$ of **$57.93\%$**, yielding a **$CPI = 2.01\times$** (more than double the contemporary baseline).
   * The **1990s Cohort** sustains an $HPS_{P75}$ of $44.56\%$ ($CPI = 1.55\times$).
   * This confirms that historical institutional recognition confers lasting commercial endurance that modern non-honored catalogs cannot match.
-
-![REQ-03 Historical Cohort Persistence](evidence/kpi_r3_historical_cohorts_cpi.png)
-*Figure 5.4: Long-term catalog persistence demonstrating that 1960s Grammy cohorts hold a 2.01x higher High Popularity Share.*

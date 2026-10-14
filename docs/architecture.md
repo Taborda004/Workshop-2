@@ -93,16 +93,14 @@ flowchart TD
     subgraph S4["Transactional Load & Dimensional Data Warehouse"]
         T_LOAD["load_dw<br/>(Transactional ACID load with engine.begin(),<br/>safe re-run idempotency)"]
         DW[("MySQL Data Warehouse<br/>spotify_grammy_dw<br/>dim_artist, dim_genre, dim_date, fact_track_performance")]
-        VIEWS["Analytical KPI Views<br/>v_kpi_r1_grammy_vs_popularity<br/>v_kpi_r1_genre_popularity_lift<br/>v_kpi_r2_audio_features_by_grammy_genre<br/>v_kpi_r3_historical_cohorts_performance"]
 
         T_VAL_PREP -->|Dependency Gate| T_LOAD
         T_LOAD --> DW
-        DW --> VIEWS
     end
 
     subgraph S5["Business Analytics & Decision Support"]
-        PBI["Power BI Analytical Dashboard<br/>(Direct Query / MySQL Connector)"]
-        VIEWS --> PBI
+        PBI["Power BI Analytical Dashboard<br/>(Star Schema Model + Dynamic DAX Measures)"]
+        DW --> PBI
     end
 ```
 

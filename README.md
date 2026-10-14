@@ -472,13 +472,15 @@ erDiagram
 4. **Sentinel Date Key Handling:** For tracks with no Grammy history (103,562 tracks), `date_key` references the certified sentinel record **`9999`** in `dim_date` (`year = 9999`, `decade_name = 'Sin Grammy'`), preserving strict foreign key referential integrity without allowing null foreign keys.
 5. **Slowly Changing Dimensions (SCD):** Configured as **SCD Type 1 (Overwrite with Batch Timestamp)**, ensuring that cumulative Grammy honors reflect the current state of artist prestige.
 
-### Certified Analytical Views
+### Kimball Star Schema Architecture
 
-The Data Warehouse schema ([`sql/dw_schema.sql`](sql/dw_schema.sql)) defines 4 certified analytical views:
-* **`v_kpi_r1_grammy_vs_popularity`:** Pre-aggregates average popularity, track volume, and percentage lift across nomination tiers for REQ-01.
-* **`v_kpi_r1_genre_popularity_lift`:** Computes genre-specific popularity lift, ranking the top musical genres by Grammy commercial lift.
-* **`v_kpi_r2_audio_features_by_grammy_genre`:** Calculates average values for all 9 normalized acoustic features comparing Grammy tracks against control catalog.
-* **`v_kpi_r3_historical_cohorts_performance`:** Aggregates track volumes, High Popularity Counts ($popularity \ge 50.0$), $HPS$, and calculates the Cultural Persistence Index ($CPI$) across historical decades.
+The Data Warehouse schema ([`sql/dw_schema.sql`](sql/dw_schema.sql)) implements a pure Kimball Star Schema without intermediate pre-aggregated views:
+* **`fact_track_performance`:** 113,549 fact records containing popularity, duration, explicit flag, and 9 audio feature dimensions at the grain of track $	imes$ genre.
+* **`dim_artist`:** Conformed artist dimension storing cumulative Grammy wins, nominations, and nomination tier rankings (`0`, `1-2`, `3-5`, `6-10`, `>10`).
+* **`dim_genre`:** Musical genre dimension enabling cross-genre lift comparisons.
+* **`dim_date`:** Award year and historical decade dimension enabling cohort persistence tracking.
+
+All analytical requirements (REQ-01, REQ-02, REQ-03) are computed dynamically in Power BI using DAX business measures evaluated across the star schema relationships.
 
 ---
 
@@ -717,38 +719,39 @@ The safe-rerun verification script ([`scripts/run_test_c.py`](scripts/run_test_c
 
 ## 15. Dashboard and Analytical Outputs
 
-The analytical layer connects **Microsoft Power BI** directly to the dimensional Data Warehouse (`spotify_grammy_dw`) in MySQL 8.0 via **DirectQuery** over port 3306.
+The analytical layer connects **Microsoft Power BI** directly to the dimensional Data Warehouse (`spotify_grammy_dw`) in MySQL 8.0 over port 3306.
 
 ### Power BI Dashboard Architecture
-* **Connection Mode:** DirectQuery to MySQL Server (`localhost:3306`).
-* **Data Source:** Certified relational views (`v_kpi_r1_grammy_vs_popularity`, `v_kpi_r1_genre_popularity_lift`, `v_kpi_r2_audio_features_by_grammy_genre`, `v_kpi_r3_historical_cohorts_performance`).
-* **Analytical Delivery:** Interactive executive visuals answering REQ-01, REQ-02, and REQ-03 with real-time push-down SQL execution.
+* **Connection Mode:** Direct Star Schema Connection to MySQL (`localhost:3306`, database `spotify_grammy_dw`).
+* **Data Sources (Kimball Model):** `fact_track_performance`, `dim_artist`, `dim_genre`, `dim_date`.
+* **Calculation Engine:** Pure DAX dynamic measures (no pre-aggregated views; measures evaluate dynamically against the star schema grain).
+* **Analytical Delivery:** Interactive executive visuals answering REQ-01, REQ-02, and REQ-03.
 
 ```
 +----------------------------------------------------------------------------------------------------+
 |                              POWER BI DASHBOARD REPOSITORY ASSETS                                  |
 +--------------------------+-------------------------------------+-----------------------------------+
-| Visual Identifier        | Target Certified MySQL View         | Power BI Visual Format            |
+| Visual Identifier        | Star Schema Elements & DAX Measure  | Power BI Visual Format            |
 +--------------------------+-------------------------------------+-----------------------------------+
-| **REQ-01: Lift by Tier** | `v_kpi_r1_grammy_vs_popularity`     | Clustered Bar / Column Chart      |
-| **REQ-01: Genre Lift**   | `v_kpi_r1_genre_popularity_lift`    | Ranked Bar Chart (> +15 pts lift) |
-| **REQ-02: Acoustic DNA** | `v_kpi_r2_audio_features_by_...`    | Radar Chart / Clustered Bar Chart |
-| **REQ-03: Longevity**    | `v_kpi_r3_historical_cohorts_...`   | Column & Line Trend Chart (CPI)   |
+| **REQ-01: Lift by Tier** | `dim_artist` + `[Avg_Popularity]`   | Clustered Bar / Column Chart      |
+| **REQ-01: Genre Lift**   | `dim_genre` + `[Avg_Pop_Grammy]`    | Ranked Bar Chart (> +15 pts lift) |
+| **REQ-02: Acoustic DNA** | `fact` + Acoustic DAX Measures      | Clustered Bar / Column Chart      |
+| **REQ-03: Longevity**    | `dim_date` + `[Cohort_Persistence]` | Column & Line Trend Chart (CPI)   |
 +--------------------------+-------------------------------------+-----------------------------------+
 ```
 
 ### Visual 1: Grammy Recognition vs. Streaming Popularity Lift (REQ-01)
-* **Underlying SQL View:** `v_kpi_r1_grammy_vs_popularity`
+* **Data Warehouse Mapping:** `dim_artist.nomination_tier` $	imes$ DAX `[Avg_Popularity]`
 * **Claim:** Institutional recognition generates a strict monotonic increase in streaming popularity.
 * **Technical Interpretation:** Tracks by unnominated artists average **28.8%** popularity. Tracks by artists with 1-2 nominations rise to **33.7%**, 3-5 nominations reach **40.1%**, 6-10 nominations reach **45.6%**, and artists with $>10$ nominations surge to **52.8%** (+24.0 percentage point net lift). Mainstream genres such as Pop, Dance, and Rock show average lifts exceeding **+15.0 points**.
 
 ### Visual 2: 9-Dimensional Acoustic Feature Profiles (REQ-02)
-* **Underlying SQL View:** `v_kpi_r2_audio_features_by_grammy_genre`
+* **Data Warehouse Mapping:** `dim_genre.genre_name` $	imes$ DAX `[Avg_Energy]`, `[Avg_Acousticness]`, `[Avg_Danceability]`
 * **Claim:** Grammy-recognized tracks exhibit distinct studio production fingerprints characterized by higher energy, higher loudness, and significantly lower acousticness.
 * **Technical Interpretation:** Centroid vector comparison reveals that Grammy tracks average **0.69** in energy (vs 0.61 control) and **-6.2 dB** in loudness (vs -8.4 dB control), while acousticness drops from **0.28** in control tracks to **0.16** in Grammy tracks. This empirically proves that modern Grammy recognition strongly favors high-production, dynamic studio recordings.
 
 ### Visual 3: Historical Longevity & Cultural Relevance Persistence (REQ-03)
-* **Underlying SQL View:** `v_kpi_r3_historical_cohorts_performance`
+* **Data Warehouse Mapping:** `dim_date.decade` $	imes$ DAX `[Cohort_Persistence_Index]` ($CPI$)
 * **Claim:** Historical Grammy cohorts sustain a Cultural Persistence Index ($CPI$) of over $2.0	imes$ compared to unnominated catalog releases.
 * **Technical Interpretation:** The empirical 75th percentile ($P_{75} = 50.0$) reveals that **57.93%** of tracks by 1960s Grammy artists remain in the top popularity tier today, compared to only **24.31%** for unnominated catalog tracks from that era. This represents a **$CPI$ multiplier of $2.01	imes$**, proving that institutional awards identify enduring cultural catalog assets.
 
