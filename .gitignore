@@ -1,0 +1,48 @@
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+*.env.local
+
+# ── Airflow ───────────────────────────────────────────────────────────────────
+logs/
+config/airflow.cfg
+config/webserver_config.py
+plugins/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Temporary pipeline work data ──────────────────────────────────────────────
+data/work/
+data/output/
+*_bad.csv
+data/*_bad.csv
+
+# Root duplicate CSVs (canonical versions are in data/)
+/spotify_dataset.csv
+/the_grammy_awards.csv
+
+# ── Great Expectations generated outputs ─────────────────────────────────────
+gx/uncommitted/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.venv/
+venv/
+.idea/
+.vscode/
+*.swp

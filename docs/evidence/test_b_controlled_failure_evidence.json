@@ -1,0 +1,20 @@
+{
+  "test_id": "TEST_B_CONTROLLED_FAILURE",
+  "description": "Deterministic injection of popularity=150 to violate Rule DQ-SP-02.",
+  "injected_violation": {
+    "column": "popularity",
+    "injected_value": 150,
+    "rule_violated": "DQ-SP-02 (ExpectColumnValuesToBeBetween 0 to 100)",
+    "expected_severity": "CRITICAL"
+  },
+  "validation_outcome": {
+    "success": false,
+    "max_failure_severity": "FailureSeverity.CRITICAL",
+    "downstream_blocked": true
+  },
+  "airflow_behavior": {
+    "task_state": "FAILED",
+    "downstream_tasks_state": "UPSTREAM_FAILED / SKIPPED"
+  },
+  "status": "PASSED"
+}

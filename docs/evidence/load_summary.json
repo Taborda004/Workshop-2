@@ -1,0 +1,7 @@
+{
+  "dim_genre_rows": 114,
+  "dim_artist_rows": 17648,
+  "fact_track_rows": 113549,
+  "source_rows": 113549,
+  "status": "LOAD_VERIFIED_CORRECT"
+}

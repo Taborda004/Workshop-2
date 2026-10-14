@@ -1,0 +1,345 @@
+{
+  "success": true,
+  "results": [
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_not_be_null",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "track_id"
+        },
+        "meta": {},
+        "id": "a4320c07-5c48-4f7f-8918-cc51db3bc5bb",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_not_be_null",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "primary_artist"
+        },
+        "meta": {},
+        "id": "6acc7b5d-98e0-49a4-9102-954cf3f0f838",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_not_be_null",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "track_genre"
+        },
+        "meta": {},
+        "id": "842fe2cc-30ed-4172-a8c6-296b811c7733",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_be_between",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "popularity",
+          "min_value": 0.0,
+          "max_value": 100.0
+        },
+        "meta": {},
+        "id": "5b7eef95-4318-4d80-afc6-5f916ab72dc2",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_be_in_set",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "has_grammy",
+          "value_set": [
+            0,
+            1
+          ]
+        },
+        "meta": {},
+        "id": "3283a5d5-eb7e-44ca-9f5c-40b8814e98ee",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_be_between",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "grammy_nominations",
+          "min_value": 0.0
+        },
+        "meta": {},
+        "id": "142f7330-1c14-4f79-90c8-b58a1b708986",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_be_between",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "danceability",
+          "min_value": 0.0,
+          "max_value": 1.0
+        },
+        "meta": {},
+        "id": "47b06c6e-a432-4658-9e52-df42feaf26b6",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_column_values_to_be_between",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column": "energy",
+          "min_value": 0.0,
+          "max_value": 1.0
+        },
+        "meta": {},
+        "id": "95b6dc90-fee4-440d-b6f2-d8416657192a",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_compound_columns_to_be_unique",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "column_list": [
+            "track_id",
+            "track_genre"
+          ]
+        },
+        "meta": {},
+        "id": "d69ea223-04ff-4399-861f-b5b23f7a6fc7",
+        "severity": "critical"
+      },
+      "result": {
+        "element_count": 113549,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": [],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 0.0,
+        "unexpected_percent_nonmissing": 0.0,
+        "partial_unexpected_counts": [],
+        "partial_unexpected_index_list": []
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    },
+    {
+      "success": true,
+      "expectation_config": {
+        "type": "expect_table_row_count_to_be_between",
+        "kwargs": {
+          "batch_id": "prepared_source-prepared_asset",
+          "min_value": 1
+        },
+        "meta": {},
+        "id": "5d82b99b-543f-440b-bb21-7ab914523e79",
+        "severity": "critical"
+      },
+      "result": {
+        "observed_value": 113549
+      },
+      "meta": {},
+      "exception_info": {
+        "raised_exception": false,
+        "exception_traceback": null,
+        "exception_message": null
+      }
+    }
+  ],
+  "suite_name": "prepared_suite",
+  "suite_parameters": {},
+  "statistics": {
+    "evaluated_expectations": 10,
+    "successful_expectations": 10,
+    "unsuccessful_expectations": 0,
+    "success_percent": 100.0
+  },
+  "meta": {
+    "great_expectations_version": "1.24.0",
+    "batch_spec": {
+      "batch_data": "PandasDataFrame"
+    },
+    "batch_markers": {
+      "ge_load_time": "20261014T042812.005202Z",
+      "pandas_data_fingerprint": "012027dd6855258addfbb34f37974d9f"
+    },
+    "active_batch_definition": {
+      "datasource_name": "prepared_source",
+      "data_connector_name": "fluent",
+      "data_asset_name": "prepared_asset",
+      "batch_identifiers": {
+        "dataframe": "<DATAFRAME>"
+      }
+    },
+    "validation_id": "c6384b7a-937b-495b-aa5a-1e44d7b09497",
+    "checkpoint_id": null,
+    "run_id": {
+      "run_name": null,
+      "run_time": "2026-10-13T23:28:12.395307-05:00"
+    },
+    "validation_time": "2026-10-14T04:28:12.395307+00:00",
+    "batch_parameters": {
+      "dataframe": "<DATAFRAME>"
+    }
+  },
+  "id": null
+}

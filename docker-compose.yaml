@@ -1,0 +1,173 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:3.1.8
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # MySQL source DB connection
+    MYSQL_SOURCE_HOST: ${MYSQL_SOURCE_HOST}
+    MYSQL_SOURCE_PORT: ${MYSQL_SOURCE_PORT}
+    MYSQL_SOURCE_DB: ${MYSQL_SOURCE_DB}
+    MYSQL_SOURCE_USER: ${MYSQL_SOURCE_USER}
+    MYSQL_SOURCE_PASSWORD: ${MYSQL_SOURCE_PASSWORD}
+    # MySQL DW connection
+    MYSQL_DW_HOST: ${MYSQL_DW_HOST}
+    MYSQL_DW_PORT: ${MYSQL_DW_PORT}
+    MYSQL_DW_DB: ${MYSQL_DW_DB}
+    MYSQL_DW_USER: ${MYSQL_DW_USER}
+    MYSQL_DW_PASSWORD: ${MYSQL_DW_PASSWORD}
+    # Spotify source path
+    SPOTIFY_CSV_PATH: /opt/airflow/data/spotify_dataset.csv
+    # Airflow work/output directories
+    AIRFLOW_WORK_DIR: /opt/airflow/data/work
+    AIRFLOW_OUTPUT_DIR: /opt/airflow/data/output
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/src:/opt/airflow/src
+    - ${AIRFLOW_PROJ_DIR:-.}/gx:/opt/airflow/gx
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+    mysql-source:
+      condition: service_healthy
+    mysql-dw:
+      condition: service_healthy
+
+services:
+
+  # ─── Airflow metadata DB (PostgreSQL) ───────────────────────────────────────
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # ─── MySQL Source DB (Grammy Awards) ────────────────────────────────────────
+  mysql-source:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_SOURCE_DB:-grammy_source}
+      MYSQL_USER: ${MYSQL_SOURCE_USER:-etl_user}
+      MYSQL_PASSWORD: ${MYSQL_SOURCE_PASSWORD:-etl_pass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-source-volume:/var/lib/mysql
+      - ./sql/source_setup.sql:/docker-entrypoint-initdb.d/source_setup.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${MYSQL_SOURCE_USER:-etl_user}",
+             "-p${MYSQL_SOURCE_PASSWORD:-etl_pass}"]
+      interval: 10s
+      retries: 10
+      start_period: 30s
+    restart: always
+
+  # ─── MySQL Data Warehouse ────────────────────────────────────────────────────
+  mysql-dw:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DW_DB:-music_dw}
+      MYSQL_USER: ${MYSQL_DW_USER:-dw_user}
+      MYSQL_PASSWORD: ${MYSQL_DW_PASSWORD:-dw_pass}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-dw-volume:/var/lib/mysql
+      - ./sql/dw_schema.sql:/docker-entrypoint-initdb.d/dw_schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${MYSQL_DW_USER:-dw_user}",
+             "-p${MYSQL_DW_PASSWORD:-dw_pass}"]
+      interval: 10s
+      retries: 10
+      start_period: 30s
+    restart: always
+
+  # ─── Airflow Web Server ──────────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ─── Airflow Scheduler ───────────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ─── Airflow Initializer ─────────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/data/work /opt/airflow/data/output
+        airflow db migrate
+        airflow users create \
+          --username "${_AIRFLOW_WWW_USER_USERNAME:-airflow}" \
+          --firstname Airflow \
+          --lastname Admin \
+          --role Admin \
+          --email admin@example.com \
+          --password "${_AIRFLOW_WWW_USER_PASSWORD:-airflow}"
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-db-volume:
+  mysql-source-volume:
+  mysql-dw-volume:
