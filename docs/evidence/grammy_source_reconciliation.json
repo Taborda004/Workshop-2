@@ -1,6 +1,6 @@
 {
     "step": "grammy_source_preparation",
-    "timestamp": "2026-10-14T01:37:57.819800",
+    "timestamp": "2026-10-14T15:08:44.119262",
     "status": "SUCCESS",
     "source_file": "C:\\Users\\mauri\\OneDrive\\Escritorio\\etl\\workshop prueba\\data\\the_grammy_awards.csv",
     "target_table": "grammy_source.grammy_awards_raw",
