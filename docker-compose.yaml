@@ -18,6 +18,9 @@ x-airflow-common: &airflow-common
     - DW_DATABASE=${DW_DATABASE:-spotify_grammy_dw}
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin,airflow:admin
     - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE=/opt/airflow/config/simple_auth_manager_passwords.json
+    - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-webserver:8080/execution
+    - AIRFLOW__API_AUTH__JWT_SECRET=workshop2sharedjwtsecretkeyforairflow3000==
+    - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFfDewikoUp2Q_Deps=
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
@@ -26,6 +29,7 @@ x-airflow-common: &airflow-common
     - ./docs/evidence:/opt/airflow/docs/evidence
     - ./sql:/opt/airflow/sql
     - ./config:/opt/airflow/config
+    - ./logs:/opt/airflow/logs
   extra_hosts:
     - "host.docker.internal:host-gateway"
   depends_on:
