@@ -1,6 +1,6 @@
 {
     "step": "load_data_warehouse",
-    "timestamp": "2026-10-14T01:51:52.715137",
+    "timestamp": "2026-10-14T21:47:15.310900",
     "status": "SUCCESS",
     "database": "spotify_grammy_dw",
     "tables": {

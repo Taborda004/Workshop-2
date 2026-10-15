@@ -1,0 +1,124 @@
+{
+    "stage": "prepared",
+    "timestamp": "2026-10-14T21:46:33.948881",
+    "total_rows_evaluated": 113549,
+    "overall_success": true,
+    "max_failure_severity": "NONE",
+    "evaluated_expectations": 7,
+    "successful_expectations": 7,
+    "unsuccessful_expectations": 0,
+    "success_percent": 100.0,
+    "expectation_results": [
+        {
+            "expectation": "expect_compound_columns_to_be_unique",
+            "column": "['track_id', 'track_genre']",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "artists",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_not_be_null",
+            "column": "track_name",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_in_set",
+            "column": "nomination_tier",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_in_set",
+            "column": "has_grammy",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_in_set",
+            "column": "is_high_popularity",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        },
+        {
+            "expectation": "expect_column_values_to_be_in_set",
+            "column": "first_grammy_decade",
+            "success": true,
+            "details": {
+                "element_count": 113549,
+                "unexpected_count": 0,
+                "unexpected_percent": 0.0,
+                "partial_unexpected_list": [],
+                "missing_count": 0,
+                "missing_percent": 0.0,
+                "unexpected_percent_total": 0.0,
+                "unexpected_percent_nonmissing": 0.0,
+                "partial_unexpected_counts": [],
+                "partial_unexpected_index_list": []
+            }
+        }
+    ]
+}
