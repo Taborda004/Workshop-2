@@ -776,16 +776,25 @@ La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse
 ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Reconocimiento Grammy vs. Incremento en Popularidad (REQ-01)
+
+![Visual 1 REQ-01 Popularidad](docs/images/powerbi_req01_popularity.png)
+
 * **Mapeo en Data Warehouse:** `dim_artist.nomination_tier` $\times$ DAX `[Promedio_Popularidad]`
 * **Afirmación (Claim):** El prestigio institucional produce un incremento monótono en la popularidad de streaming.
 * **Interpretación Técnica:** Pistas sin nominaciones promedian **28.8%** de popularidad. Con 1-2 nominaciones suben a **33.7%**, con 3-5 alcanzan **40.1%**, con 6-10 llegan a **45.6%**, y con $>10$ escalan a **52.8%** (+24.0 puntos netos de lift). Géneros como Pop, Dance y Rock presentan incrementos superiores a **+15.0 puntos**.
 
 ### Visual 2: Perfil Acústico de 9 Dimensiones (REQ-02)
+
+![Visual 2 REQ-02 Energía Acústica](docs/images/powerbi_req02_acoustic.png)
+
 * **Mapeo en Data Warehouse:** `dim_genre.genre_name` $\times$ DAX `[Promedio_Energia]`, `[Promedio_Acustica]`, `[Promedio_Bailabilidad]`
 * **Afirmación (Claim):** Las pistas galardonadas presentan una firma sonora definida por mayor energía, mayor volumen y notablemente menor presencia acústica.
 * **Interpretación Técnica:** La comparación vectorial de centroides demuestra que los temas con Grammy promedian **0.69** en energía (frente a 0.61 control) y **-6.2 dB** en loudness (frente a -8.4 dB control), mientras que la acústica baja de **0.28** en control a **0.16** en temas galardonados. Esto prueba empíricamente la preferencia de la Academia por producciones de estudio de alta potencia dinámica.
 
 ### Visual 3: Longevidad Histórica y Persistencia de Relevancia Cultural (REQ-03)
+
+![Visual 3 REQ-03 Longevidad Cultural](docs/images/powerbi_req03_longevity.png)
+
 * **Mapeo en Data Warehouse:** `dim_date.decade` $\times$ DAX `[Cohort_Persistence_Index]` ($CPI$)
 * **Afirmación (Claim):** Las cohortes históricas de Grammys sostienen un Índice de Persistencia Cultural ($CPI$) superior a $2.0\times$ frente al catálogo general de la época.
 * **Interpretación Técnica:** El percentil 75 empírico ($P_{75} = 50.0$) evidencia que el **57.93%** de las pistas de artistas premiados en los años 60 se ubican hoy en el segmento de alta popularidad, frente a solo el **24.31%** del catálogo no nominado de esa década. Esto representa un **multiplicador $CPI$ de $2.01\times$**, demostrando que los galardones identifican activos culturales con enorme valor a largo plazo.

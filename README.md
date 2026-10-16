@@ -776,16 +776,25 @@ The analytical layer connects **Microsoft Power BI** directly to the dimensional
 ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Grammy Recognition vs. Streaming Popularity Lift (REQ-01)
+
+![Visual 1 REQ-01 Popularity Lift](docs/images/powerbi_req01_popularity.png)
+
 * **Data Warehouse Mapping:** `dim_artist.nomination_tier` $\times$ DAX `[Avg_Popularity]`
 * **Claim:** Institutional recognition generates a strict monotonic increase in streaming popularity.
 * **Technical Interpretation:** Tracks by unnominated artists average **28.8%** popularity. Tracks by artists with 1-2 nominations rise to **33.7%**, 3-5 nominations reach **40.1%**, 6-10 nominations reach **45.6%**, and artists with $>10$ nominations surge to **52.8%** (+24.0 percentage point net lift). Mainstream genres such as Pop, Dance, and Rock show average lifts exceeding **+15.0 points**.
 
 ### Visual 2: 9-Dimensional Acoustic Feature Profiles (REQ-02)
+
+![Visual 2 REQ-02 Acoustic Energy](docs/images/powerbi_req02_acoustic.png)
+
 * **Data Warehouse Mapping:** `dim_genre.genre_name` $\times$ DAX `[Avg_Energy]`, `[Avg_Acousticness]`, `[Avg_Danceability]`
 * **Claim:** Grammy-recognized tracks exhibit distinct studio production fingerprints characterized by higher energy, higher loudness, and significantly lower acousticness.
 * **Technical Interpretation:** Centroid vector comparison reveals that Grammy tracks average **0.69** in energy (vs 0.61 control) and **-6.2 dB** in loudness (vs -8.4 dB control), while acousticness drops from **0.28** in control tracks to **0.16** in Grammy tracks. This empirically proves that modern Grammy recognition strongly favors high-production, dynamic studio recordings.
 
 ### Visual 3: Historical Longevity & Cultural Relevance Persistence (REQ-03)
+
+![Visual 3 REQ-03 Cultural Longevity](docs/images/powerbi_req03_longevity.png)
+
 * **Data Warehouse Mapping:** `dim_date.decade` $\times$ DAX `[Cohort_Persistence_Index]` ($CPI$)
 * **Claim:** Historical Grammy cohorts sustain a Cultural Persistence Index ($CPI$) of over $2.0\times$ compared to unnominated catalog releases.
 * **Technical Interpretation:** The empirical 75th percentile ($P_{75} = 50.0$) reveals that **57.93%** of tracks by 1960s Grammy artists remain in the top popularity tier today, compared to only **24.31%** for unnominated catalog tracks from that era. This represents a **$CPI$ multiplier of $2.01\times$**, proving that institutional awards identify enduring cultural catalog assets.
