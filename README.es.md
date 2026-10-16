@@ -771,8 +771,10 @@ La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse
 
 ### Capturas del Tablero y Modelo Dimensional (Power BI)
 
+#### Dashboard Analítico Consolidado
 ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
 
+#### Modelo Dimensional Star Schema
 ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Reconocimiento Grammy vs. Incremento en Popularidad (REQ-01)

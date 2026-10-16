@@ -771,8 +771,10 @@ The analytical layer connects **Microsoft Power BI** directly to the dimensional
 
 ### Dashboard & Dimensional Model Screenshots
 
+#### Consolidated Analytics Dashboard
 ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
 
+#### Star Schema Data Model
 ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Grammy Recognition vs. Streaming Popularity Lift (REQ-01)
