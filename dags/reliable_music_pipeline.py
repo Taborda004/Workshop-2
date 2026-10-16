@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 import pendulum
 
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task, Param
 from great_expectations.expectations.metadata_types import FailureSeverity
 
 # Pipeline core modules
@@ -55,6 +55,14 @@ SPOTIFY_SOURCE_PATH = DATA_DIR / SPOTIFY_SOURCE_FILENAME
     schedule=None,
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
+    params={
+        "spotify_filename": Param(
+            "spotify_dataset.csv",
+            type="string",
+            enum=["spotify_dataset.csv", "spotify_dataset_bad.csv"],
+            description="Select dataset: 'spotify_dataset.csv' for normal/Test A/C, or 'spotify_dataset_bad.csv' for Test B (controlled failure)."
+        )
+    },
     tags=["etl", "gx", "workshop-2", "reliable-pipeline", "spotify", "grammy"],
     doc_md=__doc__,
 )
@@ -65,14 +73,25 @@ def reliable_music_pipeline():
     # Failure Policy: Bounded retries for transient filesystem I/O
     # ========================================================================
     @task(retries=3, retry_delay=timedelta(seconds=10))
-    def extract_spotify() -> str:
+    def extract_spotify(**context) -> str:
         """
         Extract catalog data from Spotify CSV.
         Returns serialized raw Parquet file path.
         """
         WORK_DIR.mkdir(parents=True, exist_ok=True)
-        print(f"[TASK: extract_spotify] Ingesting from: {SPOTIFY_SOURCE_PATH}")
-        raw_path = extract_spotify_data(source_path=str(SPOTIFY_SOURCE_PATH), work_dir=str(WORK_DIR))
+        dag_run = context.get("dag_run")
+        params = context.get("params", {})
+        conf = dag_run.conf if dag_run and dag_run.conf else {}
+
+        filename = (
+            conf.get("spotify_filename")
+            or params.get("spotify_filename")
+            or os.getenv("SPOTIFY_SOURCE_FILENAME", "spotify_dataset.csv")
+        )
+        source_path = DATA_DIR / filename
+
+        print(f"[TASK: extract_spotify] Ingesting from: {source_path}")
+        raw_path = extract_spotify_data(source_path=str(source_path), work_dir=str(WORK_DIR))
         return str(raw_path)
 
     # ========================================================================

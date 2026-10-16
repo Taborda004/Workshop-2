@@ -1,6 +1,6 @@
 {
     "stage": "spotify_raw",
-    "timestamp": "2026-10-14T21:46:12.659793",
+    "timestamp": "2026-10-16T00:01:53.352644",
     "total_rows_evaluated": 114000,
     "overall_success": false,
     "max_failure_severity": "FailureSeverity.WARNING",

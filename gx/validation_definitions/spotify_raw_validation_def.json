@@ -13,10 +13,10 @@
       "name": "spotify_raw_datasource"
     }
   },
-  "id": "000fd9ad-0347-441e-b4b0-93b6365604b8",
+  "id": "25ea4434-5446-4ed7-a0a0-344e0393759c",
   "name": "spotify_raw_validation_def",
   "suite": {
-    "id": "2da301ec-8a14-44a2-a167-732d5e362d73",
+    "id": "dc39a118-6a8b-4b11-9ca2-6563a9981fdc",
     "name": "spotify_raw_expectation_suite"
   }
 }

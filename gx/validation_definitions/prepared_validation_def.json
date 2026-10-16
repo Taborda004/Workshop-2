@@ -13,10 +13,10 @@
       "name": "prepared_datasource"
     }
   },
-  "id": "2fd05170-eaf1-492a-9780-215068730723",
+  "id": "d3fb99ff-b621-4ff0-945e-136b686cfc33",
   "name": "prepared_validation_def",
   "suite": {
-    "id": "66736efc-ec95-40c4-aba1-ea5166fa4359",
+    "id": "495aed3a-b92e-434c-a6fd-55a0075d6ab3",
     "name": "prepared_expectation_suite"
   }
 }

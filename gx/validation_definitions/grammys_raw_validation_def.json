@@ -13,10 +13,10 @@
       "name": "grammys_raw_datasource"
     }
   },
-  "id": "7f51d59f-0d2a-4d12-8e95-19fc35c038a2",
+  "id": "38dde7ba-b87b-4d9e-9f1a-2eeae4f31707",
   "name": "grammys_raw_validation_def",
   "suite": {
-    "id": "185e9c07-debf-45f1-9e91-822a327bf6d3",
+    "id": "3d2dc2e6-d82f-4e0b-a851-398ab09e45ef",
     "name": "grammys_raw_expectation_suite"
   }
 }
