@@ -279,6 +279,56 @@ In-depth exploratory data profiling was conducted in [`notebooks/data_profiling.
 
 ---
 
+### 5.1 Forensic Diagnosis of Raw Data State: Casing, Special Characters, and Anomalies
+
+Exploratory profiling of the raw datasets revealed pervasive typographical, orthographic, and formatting irregularities that prohibited direct relational joins without extensive data engineering preprocessing:
+
+#### 1. Case Folding Discrepancies and MySQL Collisions
+* **The Raw Data Defect:** Artist names in Spotify and Grammy records lacked standardized capitalization. The same artist appeared as `'The Beatles'`, `'the beatles'`, or `'THE BEATLES'`, and `'Billie Eilish'` vs `'billie eilish'`.
+* **The MySQL Collision Hazard:** Default MySQL collations (`utf8mb4_0900_ai_ci`) are accent-insensitive and case-insensitive. Attempting to insert `'The Beatles'` and subsequently `'the beatles'` triggers a fatal unique constraint violation (`Duplicate entry for key 'uq_artist_name'`).
+* **Applied Engineering Solution:**
+  1. During entity resolution in [`src/transform.py`](src/transform.py), all names were normalized to lowercase (`.str.lower()`) to ensure deterministic in-memory matching.
+  2. For dimensional loading, a **Canonical Casing Map** (`canonical_map`) was built: artist entities were grouped by their lowercase key, and the most frequent statistical capitalization from the original catalog was selected (e.g., `'The Beatles'`), preserving visual fidelity in Power BI without duplicate key collisions.
+  3. In MySQL DDL ([`sql/dw_schema.sql`](sql/dw_schema.sql)), `dim_artist.artist_name` was defined with **`COLLATE utf8mb4_bin`** (exact binary collation), ensuring exact character-level integrity.
+
+#### 2. Diacritics, Accents, and Special Punctuation
+* **International Diacritics:** Non-English artist names frequently appeared with diacritics in one source and plain ASCII in another (e.g., `'Beyoncé'` vs `'Beyonce'`, `'Björk'` vs `'Bjork'`, `'Mötley Crüe'`, `'Rosalía'`, `'José González'`). Direct string equality checks (`=`) produced **false negatives**, stripping Grammy status from iconic tracks.
+* **Special Symbols and Punctuation:** Stylized bands with non-standard characters (e.g., `'AC/DC'`, `'P!nk'`, `'Panic! At The Disco'`, apostrophes in song titles like `"Don't Stop Believin'"`).
+* **Phantom Whitespace:** Spurious leading/trailing whitespaces, embedded tab characters (`\t`), and double spacing (e.g., `' Adele '` or `'Coldplay\t'`).
+* **Applied Engineering Solution:**
+  * Systematic application of `.str.strip()` to purge whitespace anomalies.
+  * Diacritic stripping via Python's `unidecode` library during lookup dictionary generation, ensuring `'Beyoncé'` automatically resolves to `'Beyonce'`.
+  * Preserving clean original titles in dimensional attributes to maintain aesthetic integrity.
+
+#### 3. Semicolon-Delimited Multi-Artist Strings (`;`)
+* **The Raw Data Defect:** In Spotify, **30,075 tracks (26.38% of the catalog)** contain collaborative releases represented as a single semicolon-delimited string (e.g., `'Sam Smith;Kim Petras'`, `'David Guetta;Bebe Rexha'`, `'Post Malone;Swae Lee'`).
+* **Why Traditional Joins Fail:** Grammy honors are awarded to individual performers. A direct relational join between `'Sam Smith;Kim Petras'` and the Grammy table yields zero matches, incorrectly classifying the track as unhonored.
+* **Applied Engineering Solution:**
+  * In [`src/transform.py`](src/transform.py), the `match_artists` algorithm:
+    1. Splits strings on `;` into atomic individual artist tokens.
+    2. Cleans each token (`.strip().lower()`).
+    3. Looks up each collaborator against the pre-aggregated Grammy catalog.
+    4. **Maximum Honor Inheritance:** The track inherits the highest cumulative nominations, total wins, and earliest historical consecration year among all participating collaborators.
+    5. Unhonored collaborations cleanly enter the control group (`has_grammy = 0`, `nomination_tier = 'Sin Grammy'`).
+
+#### 4. Null Metadata and Physically Impossible Values
+* **The 65900 Anomaly (`track_id = '1kQC0hZqf4nL07Yc63XF4x'`):**
+  * Presenting null values (`NaN`) in `artists`, `album_name`, and `track_name`.
+  * Physically impossible acoustic metric: `duration_ms = 0` (zero-millisecond duration).
+  * **Operational Policy:** Great Expectations flagged this anomaly at the raw gate under `DQ-RAW-SP-03` and `DQ-RAW-SP-05`. Classified with **`WARNING`** severity, the pipeline logged the audit trail without halting, and the transformation stage safely purged the unidentifiable record.
+* **1,840 Null Artist Records in Grammy Source:**
+  * In categories like *Best New Artist* or *Song of the Year*, the `artist` column was stored as `NULL`, with the performer identity residing in `nominee`.
+  * **Applied Solution:** Coalescence logic in pandas: `gr_clean.loc[bna_mask, "artist"] = gr_clean.loc[bna_mask, "nominee"]`, rescuing foundational honorees such as The Beatles, Adele, Alicia Keys, and Billie Eilish.
+
+#### 5. Technical Duplicates vs Legitimate Multi-Genre Tracks: 113,549 Facts
+* Initial Spotify catalog: $114\text{ genres} \times 1,000\text{ tracks} = \mathbf{114,000\text{ rows}}$.
+* Unique track IDs (`track_id`): **89,741**. This reflects valid multi-genre classifications (e.g., a track legitimately tagged in both `pop` and `dance`).
+* Technical Redundancies: Exactly **450 technical duplicate pairs** were detected where `track_id` and `track_genre` were 100% identical.
+* **Final Reconciled Mathematical Equation:**
+  $$\text{Raw Spotify (114,000)} - \text{Duplicates (450)} - \text{Null Anomaly (1)} = \mathbf{113,549\text{ Certified Facts}}.$$
+
+---
+
 ## 6. Quality Risks and Quality Rules
 
 ### Quality Risk Register
