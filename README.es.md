@@ -51,10 +51,11 @@
 12. [12. Evidencia de Ejecución Exitosa (Test A)](#12-evidencia-de-ejecución-exitosa-test-a---successful-end-to-end-execution)
 13. [13. Evidencia de Fallo Controlado (Test B)](#13-evidencia-de-fallo-controlado-test-b---controlled-critical-quality-failure)
 14. [14. Estrategia de Repetibilidad (Test C - Safe Rerun)](#14-estrategia-de-repetibilidad-test-c---safe-rerun--idempotency)
-15. [15. Dashboard and Analytical Outputs](#15-dashboard-and-analytical-outputs)
+15. [15. Reporte Analítico y Validación de Hipótesis (Power BI)](#15-reporte-analítico-y-validación-de-hipótesis-power-bi)
 16. [16. Demostraciones en Vivo para la Evaluación](#16-demostraciones-en-vivo-para-la-evaluación-live-evaluation-demonstrations)
 17. [17. Instrucciones de Configuración y Ejecución](#17-instrucciones-de-configuración-y-ejecución)
 18. [18. Supuestos y Limitaciones](#18-supuestos-y-limitaciones)
+19. [19. Guía Conceptual de Sustentación y Preguntas del Evaluador](#19-guía-conceptual-de-sustentación-y-preguntas-del-evaluador)
 
 ---
 
@@ -974,3 +975,92 @@ docker compose ps
 2. **Granularidad del Streaming:** El dataset ofrece fotografías del catálogo y no series de tiempo continuas, impidiendo análisis de causalidad antes y después de una ceremonia.
 3. **Oportunidades de Mejora:** Versiones futuras podrían implementar una rama de streaming en tiempo real usando Apache Kafka para capturar reproducciones directas de la API de Spotify.
 
+---
+
+## 19. Guía Conceptual de Sustentación y Preguntas del Evaluador
+
+Esta sección está diseñada específicamente como apoyo para la defensa oral del proyecto. Proporciona las respuestas conceptuales, justificaciones arquitectónicas y analogías intuitivas para responder con solvencia y seguridad técnica a las preguntas del docente evaluador, sin depender de memorizar líneas de código.
+
+### Resumen Rápido de Conceptos Clave (Glosario Intuitivo)
+
+* **DAG (Directed Acyclic Graph / Grafo Acíclico Dirigido):** Es el mapa de ruta o receta ordenada de ejecución del pipeline. *"Dirigido"* significa que cada paso tiene un sentido y dependencias estrictas (extraer $\rightarrow$ validar $\rightarrow$ transformar $\rightarrow$ cargar). *"Acíclico"* significa que no contiene ciclos ni bucles infinitos: el flujo siempre avanza hacia adelante y nunca retrocede a un paso previo.
+* **Compuerta de Calidad (Gatekeeper):** Punto de control que inspecciona los datos antes de permitirles avanzar a la siguiente etapa del pipeline. Si los datos no superan el estándar, la compuerta se cierra para evitar propagar contaminación.
+* **Circuit Breaker (Interruptor de Calidad):** Mecanismo de seguridad inspirado en los disyuntores eléctricos. Si se detecta un error de severidad crítica (`CRITICAL`), el interruptor se dispara de inmediato, deteniendo el DAG y arrojando una excepción para impedir que datos corruptos lleguen a la transformación o al Data Warehouse.
+* **Severidad de Errores (`CRITICAL` vs `WARNING`):**
+  * `CRITICAL`: Infracciones estructurales intolerables (nulos en identificadores primarios, valores de métricas fuera de rango físico como popularidad $>100$). Provocan la detención forzosa del pipeline.
+  * `WARNING`: Anomalías no bloqueantes (desviaciones estadísticas menores como tempos inusuales). Se auditan en los logs pero permiten continuar el flujo.
+* **Zona de Staging:** Área de almacenamiento intermedio en disco donde cada tarea deposita sus resultados antes de que la siguiente los consuma.
+* **Apache Parquet:** Formato de almacenamiento columnar binario y comprimido (Snappy) utilizado en el staging. Es significativamente más rápido de leer, fuertemente tipado y mucho más compacto que un CSV o JSON.
+* **XCom (Cross-Communication):** Mecanismo nativo de Airflow para que las tareas intercambien mensajes. En producción, **solo se usa para enviar metadatos ligeros** (como rutas de archivos o conteos), nunca para transferir DataFrames masivos.
+* **Granularidad (Grain):** El nivel atómico de significado de una sola fila en una tabla. En nuestra tabla de hechos `fact_track_performance`, el grano es **(Pista por Género)**: `(track_id, track_genre)`.
+* **Clave Subrogada (Surrogate Key - `_sk`):** Identificador numérico entero secuencial generado internamente en el Data Warehouse, independiente de los IDs comerciales de Spotify o Grammys.
+* **Idempotencia:** Propiedad de un sistema donde ejecutar una operación una o múltiples veces produce exactamente el mismo resultado final, sin duplicados ni inconsistencias.
+* **Transacciones ACID:** Bloques de ejecución en base de datos (`engine.begin()`) que garantizan que todas las operaciones se completan exitosamente (*Commit*) o ninguna se aplica si ocurre un fallo (*Rollback*).
+* **Medida DAX (Data Analysis Expressions):** Fórmula dinámica en Power BI que se calcula en tiempo real según el contexto de filtro seleccionado por el usuario, sin consumir espacio estático en la base de datos ni en memoria.
+
+---
+
+### Preguntas Típicas del Profesor y Respuestas Modelo para Sustentación
+
+#### 1. ¿Por qué utilizaron Apache Airflow y no un script secuencial de Python como en el Workshop 1?
+> **Respuesta del Ingeniero de Datos:**  
+> *"En el Workshop 1 ejecutamos un script monolítico (`main.py`) que corría de forma lineal. Si ese script fallaba en el minuto 20, no había observabilidad, no sabíamos exactamente qué falló y no era posible reintentar solo el paso averiado sin reiniciar todo el proceso.  
+> En este proyecto usamos **Apache Airflow 3.1.8** porque ofrece tres ventajas empresariales decisivas:
+> 1. **Ejecución Paralela:** Extraemos y validamos Spotify y Grammys simultáneamente en ramas independientes, reduciendo a la mitad el tiempo de ingesta.
+> 2. **Resiliencia y Reintentos Automáticos:** Cada tarea tiene políticas de reintento (`retries=2, retry_delay=30s`) ante caídas de red o bloqueos de base de datos.
+> 3. **Observabilidad en Tiempo Real:** Dispone de una interfaz gráfica (Graph y Grid View) con logs detallados por tarea y estados visuales inmediatos."*
+
+#### 2. ¿Cómo viajan los datos entre las tareas de Airflow y por qué no usaron XCom para los DataFrames?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Ese es un antipatrón muy común en principiantes. XCom almacena los datos en la base de datos interna de metadatos de Airflow. Si intentamos pasar un DataFrame de 114,000 registros por XCom, saturamos la base de metadatos y degradamos el orquestador.  
+> Siguiendo el estándar de la industria, desacoplamos el transporte: cada tarea almacena su salida en una **zona de staging** en formato **Apache Parquet** comprimido con Snappy (`/opt/airflow/data/staging/`). Por XCom únicamente transmitimos un mensaje ligero de texto con la ruta del archivo (`staging_path`)."*
+
+#### 3. ¿Por qué utilizaron Great Expectations y no simples condicionales `if / else` en Python?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Las sentencias `if / else` mezclan la lógica de negocio con la lógica de calidad, haciendo que el código sea frágil y difícil de auditar.  
+> **Great Expectations (GX)** nos proporciona:
+> 1. **Declaratividad Estándar:** Las reglas se declaran formalmente como expectativas matemáticas (`expect_column_values_to_not_be_null`, `expect_column_values_to_be_between`).
+> 2. **Auditoría Automatizada:** Genera diccionarios y reportes detallados con el porcentaje de éxito, registros anómalos y severidad.
+> 3. **Desacoplamiento:** Separamos la calidad en suites reutilizables: dos suites para las fuentes crudas (`spotify_raw_suite`, `grammys_raw_suite`) y una suite para los datos ya integrados (`prepared_analytical_suite`)."*
+
+#### 4. ¿Cómo demostraron que el sistema es resiliente y que el Data Warehouse no se corrompe ante datos anómalos?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Diseñamos y ejecutamos formalmente el **Test B (Fallo Controlado)**. Inyectamos intencionalmente un dataset con valores corruptos (`spotify_dataset_bad.csv`), conteniendo popularidades negativas y llaves primarias nulas.  
+> La tarea `validate_raw_spotify` detectó inmediatamente infracciones de severidad `CRITICAL` y activó el **Circuit Breaker**, abortando el DAG antes de que los datos alcanzaran la fase de transformación o de carga. Inspeccionamos la base de datos MySQL y demostramos que no se insertó ni una sola fila corrupta."*
+
+#### 5. ¿Qué es la granularidad de su tabla de hechos y cómo manejaron que una canción pertenezca a varios géneros?
+> **Respuesta del Ingeniero de Datos:**  
+> *"La granularidad de `fact_track_performance` es estrictamente **(Pista de audio por Género)**: `(track_id, track_genre)`.  
+> Esto es deliberado porque en la industria musical una misma obra (por ejemplo, de Pop/Rock) compite y se reproduce en diferentes nichos de mercado. Al definir esta granularidad, cada fila contiene los atributos acústicos y de streaming para ese género específico. Al mismo tiempo, durante la fase de transformación identificamos y eliminamos exactamente 450 pares duplicados idénticos producto de redundancias técnicas en la recolección, dejando 113,549 hechos analíticos certificados."*
+
+#### 6. ¿Cómo resolvieron el cruce entre los artistas de Spotify y los ganadores del Grammy si están escritos de forma diferente?
+> **Respuesta del Ingeniero de Datos:**  
+> *"En Spotify, las pistas colaborativas agrupan múltiples artistas separados por punto y coma (ej. `'Coldplay; BTS'`), mientras que en la base de Grammys los registros figuran con el nombre individual del artista.  
+> En el módulo `src/transform.py` aplicamos un pipeline de **Resolución de Entidades**:
+> 1. Extrajimos el artista principal tomando el primer token antes del delimitador `;`.
+> 2. Normalizamos cadenas aplicando conversión a minúsculas (`.lower()`) y eliminación de espacios en blanco (`.strip()`).
+> 3. Cruzamos determinísticamente contra el histórico acumulado de Grammys, calculando para cada artista su año de primer galardón, total de victorias, total de nominaciones y su `nomination_tier`."*
+
+#### 7. ¿Por qué crearon Claves Subrogadas (`_sk`) si las fuentes ya traían identificadores como `track_id`?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Por tres razones fundamentales de la metodología Kimball:
+> 1. **Independencia Tecnológica:** Si Spotify modifica en el futuro la longitud o el formato de sus identificadores alfanuméricos (`track_id`), nuestro Data Warehouse no sufre cambios estructurales.
+> 2. **Rendimiento de Consultas:** Unir tablas en MySQL mediante claves subrogadas de tipo entero (`INT`) es significativamente más rápido y consume mucho menos índice que hacer JOINs sobre cadenas alfanuméricas de 22 caracteres.
+> 3. **Gestión de Registros Especiales:** Permite insertar registros predeterminados como la fila `-1` (para artistas o fechas desconocidas) sin violar restricciones de integridad referencial."*
+
+#### 8. ¿Qué significa que su proceso de carga sea "Idempotente" (Test C)?
+> **Respuesta del Ingeniero de Datos:**  
+> *"La idempotencia garantiza que si el pipeline se ejecuta una vez, dos veces o diez veces consecutivas sobre el mismo período de datos, el resultado en el Data Warehouse es exactamente el mismo: no se crean filas duplicadas, no se alteran los totales acumulados y no hay deriva de métricas.  
+> Esto lo garantizamos en `src/load.py` envolviendo la operación dentro de un bloque transaccional atómico (`with engine.begin() as conn:`). En el Test C reejecutamos el pipeline completo y demostramos que el conteo de filas se mantuvo exactamente en 113,549 con 0.0000% de variación."*
+
+#### 9. En Power BI, ¿por qué utilizaron Medidas DAX en lugar de Columnas Calculadas?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Las Columnas Calculadas se computan durante la carga y ocupan espacio estático en la memoria RAM del modelo de Power BI. En contraste, las **Medidas DAX** se evalúan de forma dinámica en tiempo de consulta, respondiendo instantáneamente al contexto de filtro que el usuario seleccione en el reporte (por ejemplo, segmentar por una década o género musical específico).  
+> Los tres requerimientos analíticos (REQ-01 Lift de Popularidad, REQ-02 ADN Acústico y REQ-03 Persistencia Cultural $CPI$) fueron codificados como medidas DAX para garantizar máxima velocidad analítica y cero consumo redundante de almacenamiento."*
+
+#### 10. ¿Qué descubrieron en Power BI? ¿Se cumplen las hipótesis del negocio?
+> **Respuesta del Ingeniero de Datos:**  
+> *"Sí, se validaron las tres hipótesis con evidencia cuantitativa contundente:
+> 1. **REQ-01 (Prestigio vs Popularidad):** Existe un incremento estrictamente monótono. Los artistas sin nominaciones promedian **28.8%** de popularidad; con 1-2 nominaciones suben a **33.7%**; y los artistas con más de 10 nominaciones escalan a **52.8%** (+24 puntos de ventaja comercial neta).
+> 2. **REQ-02 (Firma Acústica de Estudio):** Las canciones premiadas presentan una firma de producción muy clara: son más enérgicas (**0.69** vs 0.61), tienen mayor volumen dinámico (**-6.2 dB** vs -8.4 dB) y notablemente menor acústica (**0.16** vs 0.28).
+> 3. **REQ-03 (Longevidad Cultural):** Las cohortes de artistas premiados en los años 60 sostienen hoy un **57.93%** de sus temas en el segmento de alta popularidad ($P_{75}$), frente a solo el **24.31%** del catálogo no premiado de esa época. Esto prueba un multiplicador $CPI$ de **$2.01\times$**, demostrando que el reconocimiento Grammy predice la durabilidad cultural del catálogo a largo plazo."*
