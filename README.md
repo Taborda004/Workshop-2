@@ -652,7 +652,11 @@ When a Great Expectations gatekeeper detects a `CRITICAL` contract violation:
 * **Result:** All 7 tasks completed successfully with status `success` (Green).
 * **Total Wall-Clock Execution Duration:** **31.52 seconds**.
 * **Log Evidence:** Preserved in [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
-* **Visual Evidence:** Grid and Graph views in Airflow UI (`http://localhost:8080`).
+* **Visual Evidence:**
+  * **Airflow Graph View (DAG Topology & Gates):**
+    ![Airflow Graph View](docs/images/airflow_graph_view.png)
+  * **Airflow Grid View (All 7 Tasks Green):**
+    ![Airflow Grid View](docs/images/airflow_grid_view.png)
 * **Reconciled Data Warehouse Counts (MySQL `spotify_grammy_dw`):**
   * `dim_artist`: **17,639 rows**
   * `dim_genre`: **114 rows**
@@ -690,7 +694,9 @@ When a Great Expectations gatekeeper detects a `CRITICAL` contract violation:
   * `validate_prepared`: **`upstream_failed`** (Blocked)
   * `load_dw`: **`upstream_failed`** (Blocked)
 * **Log Evidence:** Preserved in [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) and [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
-* **Visual Evidence:** RED failed box in Airflow Grid/Graph View and subsequent tasks in grey/orange (`upstream_failed`).
+* **Visual Evidence:**
+  * **Airflow Circuit Breaker Interception Log (Task Failure Log):**
+    ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
 
 ```
 [VALIDATION FAILURE FORENSIC LOG]
@@ -766,24 +772,32 @@ The analytical layer connects **Microsoft Power BI** directly to the dimensional
 +--------------------------+-------------------------------------+-----------------------------------+
 ```
 
+### Dashboard & Dimensional Model Screenshots
+
+* **Power BI Analytics Dashboard (Visuals REQ-01, REQ-02, REQ-03):**
+  ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
+
+* **Star Schema Data Model (Kimball Dimensional Architecture):**
+  ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
+
 ### Visual 1: Grammy Recognition vs. Streaming Popularity Lift (REQ-01)
-* **Data Warehouse Mapping:** `dim_artist.nomination_tier` $	imes$ DAX `[Avg_Popularity]`
+* **Data Warehouse Mapping:** `dim_artist.nomination_tier` $\times$ DAX `[Avg_Popularity]`
 * **Claim:** Institutional recognition generates a strict monotonic increase in streaming popularity.
 * **Technical Interpretation:** Tracks by unnominated artists average **28.8%** popularity. Tracks by artists with 1-2 nominations rise to **33.7%**, 3-5 nominations reach **40.1%**, 6-10 nominations reach **45.6%**, and artists with $>10$ nominations surge to **52.8%** (+24.0 percentage point net lift). Mainstream genres such as Pop, Dance, and Rock show average lifts exceeding **+15.0 points**.
 
 ### Visual 2: 9-Dimensional Acoustic Feature Profiles (REQ-02)
-* **Data Warehouse Mapping:** `dim_genre.genre_name` $	imes$ DAX `[Avg_Energy]`, `[Avg_Acousticness]`, `[Avg_Danceability]`
+* **Data Warehouse Mapping:** `dim_genre.genre_name` $\times$ DAX `[Avg_Energy]`, `[Avg_Acousticness]`, `[Avg_Danceability]`
 * **Claim:** Grammy-recognized tracks exhibit distinct studio production fingerprints characterized by higher energy, higher loudness, and significantly lower acousticness.
 * **Technical Interpretation:** Centroid vector comparison reveals that Grammy tracks average **0.69** in energy (vs 0.61 control) and **-6.2 dB** in loudness (vs -8.4 dB control), while acousticness drops from **0.28** in control tracks to **0.16** in Grammy tracks. This empirically proves that modern Grammy recognition strongly favors high-production, dynamic studio recordings.
 
 ### Visual 3: Historical Longevity & Cultural Relevance Persistence (REQ-03)
-* **Data Warehouse Mapping:** `dim_date.decade` $	imes$ DAX `[Cohort_Persistence_Index]` ($CPI$)
-* **Claim:** Historical Grammy cohorts sustain a Cultural Persistence Index ($CPI$) of over $2.0	imes$ compared to unnominated catalog releases.
-* **Technical Interpretation:** The empirical 75th percentile ($P_{75} = 50.0$) reveals that **57.93%** of tracks by 1960s Grammy artists remain in the top popularity tier today, compared to only **24.31%** for unnominated catalog tracks from that era. This represents a **$CPI$ multiplier of $2.01	imes$**, proving that institutional awards identify enduring cultural catalog assets.
+* **Data Warehouse Mapping:** `dim_date.decade` $\times$ DAX `[Cohort_Persistence_Index]` ($CPI$)
+* **Claim:** Historical Grammy cohorts sustain a Cultural Persistence Index ($CPI$) of over $2.0\times$ compared to unnominated catalog releases.
+* **Technical Interpretation:** The empirical 75th percentile ($P_{75} = 50.0$) reveals that **57.93%** of tracks by 1960s Grammy artists remain in the top popularity tier today, compared to only **24.31%** for unnominated catalog tracks from that era. This represents a **$CPI$ multiplier of $2.01\times$**, proving that institutional awards identify enduring cultural catalog assets.
 
 ### Strategic Business Insights for Streaming Executives
-1. **Catalog Valuation:** Acquiring publishing rights to Grammy-winning historical catalogs (1960s–1980s) carries double the streaming longevity of standard catalog tracks ($CPI \ge 2.0	imes$).
-2. **Algorithmic Playlist Curation:** Injecting high-tier Grammy tracks into recommendation seeds increases user engagement duration by leveraging proven production acoustics (energy $\ge 0.69$, loudness $\ge -6.2	ext{ dB}$).
+1. **Catalog Valuation:** Acquiring publishing rights to Grammy-winning historical catalogs (1960s–1980s) carries double the streaming longevity of standard catalog tracks ($CPI \ge 2.0\times$).
+2. **Algorithmic Playlist Curation:** Injecting high-tier Grammy tracks into recommendation seeds increases user engagement duration by leveraging proven production acoustics (energy $\ge 0.69$, loudness $\ge -6.2\text{ dB}$).
 3. **A&R Predictive Scouting:** Artists crossing the 3-nomination threshold experience an immediate step-function increase in streaming momentum (+11.3 popularity points).
 
 ---

@@ -652,7 +652,11 @@ El **Test A** demuestra la ejecución integral y limpia del pipeline de extremo 
 * **Resultado:** Las 7 tareas completadas exitosamente con estado `success` (Verde).
 * **Tiempo Total de Ejecución:** **31.52 segundos**.
 * **Evidencia de Logs:** Preservada en [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
-* **Evidencia Visual:** Vistas Grid y Graph en Airflow UI (`http://localhost:8080`).
+* **Evidencia Visual:**
+  * **Vista de Grafo en Airflow (DAG Topology & Gates):**
+    ![Airflow Graph View](docs/images/airflow_graph_view.png)
+  * **Vista de Cuadrícula en Airflow (All 7 Tasks Green):**
+    ![Airflow Grid View](docs/images/airflow_grid_view.png)
 * **Conteos Reconciliados en Data Warehouse (MySQL `spotify_grammy_dw`):**
   * `dim_artist`: **17,639 filas**
   * `dim_genre`: **114 filas**
@@ -690,7 +694,9 @@ El **Test B** certifica la eficacia del patrón **Circuit Breaker** mediante la 
   * `validate_prepared`: **`upstream_failed`** (Bloqueado)
   * `load_dw`: **`upstream_failed`** (Bloqueado)
 * **Evidencia de Logs:** Preservada en [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) y [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
-* **Evidencia Visual:** Recuadro ROJO en Airflow Grid/Graph View y tareas posteriores en gris/naranja (`upstream_failed`).
+* **Evidencia Visual:**
+  * **Log Forense de Interrupción en Airflow (Circuit Breaker Triggered):**
+    ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
 
 ```
 [LOG FORENSE DE FALLO DE VALIDACIÓN]
@@ -766,20 +772,28 @@ La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse
 +--------------------------+-------------------------------------+-----------------------------------+
 ```
 
+### Capturas del Tablero y Modelo Dimensional (Power BI)
+
+* **Tablero Analítico Ejecutivo en Power BI (Visuales REQ-01, REQ-02, REQ-03):**
+  ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
+
+* **Modelo de Datos en Esquema en Estrella (Kimball Star Schema):**
+  ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
+
 ### Visual 1: Reconocimiento Grammy vs. Incremento en Popularidad (REQ-01)
-* **Mapeo en Data Warehouse:** `dim_artist.nomination_tier` $	imes$ DAX `[Promedio_Popularidad]`
+* **Mapeo en Data Warehouse:** `dim_artist.nomination_tier` $\times$ DAX `[Promedio_Popularidad]`
 * **Afirmación (Claim):** El prestigio institucional produce un incremento monótono en la popularidad de streaming.
 * **Interpretación Técnica:** Pistas sin nominaciones promedian **28.8%** de popularidad. Con 1-2 nominaciones suben a **33.7%**, con 3-5 alcanzan **40.1%**, con 6-10 llegan a **45.6%**, y con $>10$ escalan a **52.8%** (+24.0 puntos netos de lift). Géneros como Pop, Dance y Rock presentan incrementos superiores a **+15.0 puntos**.
 
 ### Visual 2: Perfil Acústico de 9 Dimensiones (REQ-02)
-* **Mapeo en Data Warehouse:** `dim_genre.genre_name` $	imes$ DAX `[Promedio_Energia]`, `[Promedio_Acustica]`, `[Promedio_Bailabilidad]`
+* **Mapeo en Data Warehouse:** `dim_genre.genre_name` $\times$ DAX `[Promedio_Energia]`, `[Promedio_Acustica]`, `[Promedio_Bailabilidad]`
 * **Afirmación (Claim):** Las pistas galardonadas presentan una firma sonora definida por mayor energía, mayor volumen y notablemente menor presencia acústica.
 * **Interpretación Técnica:** La comparación vectorial de centroides demuestra que los temas con Grammy promedian **0.69** en energía (frente a 0.61 control) y **-6.2 dB** en loudness (frente a -8.4 dB control), mientras que la acústica baja de **0.28** en control a **0.16** en temas galardonados. Esto prueba empíricamente la preferencia de la Academia por producciones de estudio de alta potencia dinámica.
 
 ### Visual 3: Longevidad Histórica y Persistencia de Relevancia Cultural (REQ-03)
-* **Mapeo en Data Warehouse:** `dim_date.decade` $	imes$ DAX `[Cohort_Persistence_Index]` ($CPI$)
-* **Afirmación (Claim):** Las cohortes históricas de Grammys sostienen un Índice de Persistencia Cultural ($CPI$) superior a $2.0	imes$ frente al catálogo general de la época.
-* **Interpretación Técnica:** El percentil 75 empírico ($P_{75} = 50.0$) evidencia que el **57.93%** de las pistas de artistas premiados en los años 60 se ubican hoy en el segmento de alta popularidad, frente a solo el **24.31%** del catálogo no nominado de esa década. Esto representa un **multiplicador $CPI$ de $2.01	imes$**, demostrando que los galardones identifican activos culturales con enorme valor a largo plazo.
+* **Mapeo en Data Warehouse:** `dim_date.decade` $\times$ DAX `[Cohort_Persistence_Index]` ($CPI$)
+* **Afirmación (Claim):** Las cohortes históricas de Grammys sostienen un Índice de Persistencia Cultural ($CPI$) superior a $2.0\times$ frente al catálogo general de la época.
+* **Interpretación Técnica:** El percentil 75 empírico ($P_{75} = 50.0$) evidencia que el **57.93%** de las pistas de artistas premiados en los años 60 se ubican hoy en el segmento de alta popularidad, frente a solo el **24.31%** del catálogo no nominado de esa década. Esto representa un **multiplicador $CPI$ de $2.01\times$**, demostrando que los galardones identifican activos culturales con enorme valor a largo plazo.
 
 ### Hallazgos Estratégicos para Ejecutivos del Negocio Musical
 1. **Valoración de Catálogos:** Adquirir derechos editoriales de catálogos históricos premiados (años 60 a 80) duplica la durabilidad comercial en streaming ($CPI \ge 2.0\times$).
