@@ -44,18 +44,18 @@ def build_and_register_suite(context, stage: str):
     """
     suite_name = f"{stage}_expectation_suite"
     
-    # Remove existing suite in context if re-registering
+    # If suite already exists in context with expectations, reuse it safely without disk churn
     try:
-        context.suites.delete(suite_name)
+        existing_suite = context.suites.get(suite_name)
+        if existing_suite and len(existing_suite.expectations) > 0:
+            return existing_suite
     except Exception:
         pass
 
-    suite = gx.ExpectationSuite(name=suite_name)
-    suite = context.suites.add(suite)
-
+    expectations = []
     if stage == "spotify_raw":
         # DQ-RAW-SP-01: Popularity bounds [0, 100] (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="popularity",
                 min_value=0,
@@ -65,14 +65,14 @@ def build_and_register_suite(context, stage: str):
             )
         )
         # DQ-RAW-SP-02: Track ID completeness and validity (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="track_id",
                 severity="critical"
             )
         )
         # DQ-RAW-SP-03: Artists completeness (Warning: 1 null tolerated at raw stage)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="artists",
                 mostly=0.999,
@@ -81,7 +81,7 @@ def build_and_register_suite(context, stage: str):
         )
         # DQ-RAW-SP-04: Normalized audio features bounds [0.0, 1.0] (Critical)
         for col in ["danceability", "energy", "valence"]:
-            suite.add_expectation(
+            expectations.append(
                 gx.expectations.ExpectColumnValuesToBeBetween(
                     column=col,
                     min_value=0.0,
@@ -91,7 +91,7 @@ def build_and_register_suite(context, stage: str):
                 )
             )
         # DQ-RAW-SP-05: Positive duration (Warning)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="duration_ms",
                 min_value=1000,
@@ -102,7 +102,7 @@ def build_and_register_suite(context, stage: str):
 
     elif stage == "grammys_raw":
         # DQ-RAW-GR-01: Award Year validity (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeBetween(
                 column="year",
                 min_value=1958,
@@ -112,7 +112,7 @@ def build_and_register_suite(context, stage: str):
             )
         )
         # DQ-RAW-GR-02: Winner flag validity (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="winner",
                 value_set=[True, False, 1, 0],
@@ -121,7 +121,7 @@ def build_and_register_suite(context, stage: str):
             )
         )
         # DQ-RAW-GR-03: Category completeness (Warning)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="category",
                 mostly=0.99,
@@ -131,27 +131,27 @@ def build_and_register_suite(context, stage: str):
 
     elif stage == "prepared":
         # DQ-PREP-01: Composite uniqueness of (track_id, track_genre) (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectCompoundColumnsToBeUnique(
                 column_list=["track_id", "track_genre"],
                 severity="critical"
             )
         )
         # DQ-PREP-02: Artists and Track Name completeness post-transformation (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="artists",
                 severity="critical"
             )
         )
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToNotBeNull(
                 column="track_name",
                 severity="critical"
             )
         )
         # DQ-PREP-03: Nomination Tier valid domain (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="nomination_tier",
                 value_set=["0", "1-2", "3-5", "6-10", ">10"],
@@ -159,14 +159,14 @@ def build_and_register_suite(context, stage: str):
             )
         )
         # DQ-PREP-04: Binary flags validity (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="has_grammy",
                 value_set=[0, 1],
                 severity="critical"
             )
         )
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="is_high_popularity",
                 value_set=[0, 1],
@@ -174,7 +174,7 @@ def build_and_register_suite(context, stage: str):
             )
         )
         # DQ-PREP-05: Decade cohort validity (Critical)
-        suite.add_expectation(
+        expectations.append(
             gx.expectations.ExpectColumnValuesToBeInSet(
                 column="first_grammy_decade",
                 value_set=["1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "Sin Grammy"],
@@ -185,7 +185,13 @@ def build_and_register_suite(context, stage: str):
     else:
         raise ValueError(f"Unknown validation stage: {stage}")
 
-    return suite
+    try:
+        context.suites.delete(suite_name)
+    except Exception:
+        pass
+
+    suite = gx.ExpectationSuite(name=suite_name, expectations=expectations)
+    return context.suites.add(suite)
 
 
 def run_validation(dataframe: pd.DataFrame, stage: str, context_mode: str = "file", output_prefix: str = ""):
