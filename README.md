@@ -653,10 +653,8 @@ When a Great Expectations gatekeeper detects a `CRITICAL` contract violation:
 * **Total Wall-Clock Execution Duration:** **31.52 seconds**.
 * **Log Evidence:** Preserved in [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
 * **Visual Evidence:**
-  * **Airflow Graph View (DAG Topology & Gates):**
-    ![Airflow Graph View](docs/images/airflow_graph_view.png)
-  * **Airflow Grid View (All 7 Tasks Green):**
-    ![Airflow Grid View](docs/images/airflow_grid_view.png)
+  ![Airflow Graph View](docs/images/airflow_graph_view.png)
+  ![Airflow Grid View](docs/images/airflow_grid_view.png)
 * **Reconciled Data Warehouse Counts (MySQL `spotify_grammy_dw`):**
   * `dim_artist`: **17,639 rows**
   * `dim_genre`: **114 rows**
@@ -695,8 +693,7 @@ When a Great Expectations gatekeeper detects a `CRITICAL` contract violation:
   * `load_dw`: **`upstream_failed`** (Blocked)
 * **Log Evidence:** Preserved in [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) and [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
 * **Visual Evidence:**
-  * **Airflow Circuit Breaker Interception Log (Task Failure Log):**
-    ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
+  ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
 
 ```
 [VALIDATION FAILURE FORENSIC LOG]
@@ -774,11 +771,9 @@ The analytical layer connects **Microsoft Power BI** directly to the dimensional
 
 ### Dashboard & Dimensional Model Screenshots
 
-* **Power BI Analytics Dashboard (Visuals REQ-01, REQ-02, REQ-03):**
-  ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
+![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
 
-* **Star Schema Data Model (Kimball Dimensional Architecture):**
-  ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
+![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Grammy Recognition vs. Streaming Popularity Lift (REQ-01)
 * **Data Warehouse Mapping:** `dim_artist.nomination_tier` $\times$ DAX `[Avg_Popularity]`

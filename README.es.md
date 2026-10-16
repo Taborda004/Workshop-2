@@ -653,10 +653,8 @@ El **Test A** demuestra la ejecución integral y limpia del pipeline de extremo 
 * **Tiempo Total de Ejecución:** **31.52 segundos**.
 * **Evidencia de Logs:** Preservada en [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
 * **Evidencia Visual:**
-  * **Vista de Grafo en Airflow (DAG Topology & Gates):**
-    ![Airflow Graph View](docs/images/airflow_graph_view.png)
-  * **Vista de Cuadrícula en Airflow (All 7 Tasks Green):**
-    ![Airflow Grid View](docs/images/airflow_grid_view.png)
+  ![Airflow Graph View](docs/images/airflow_graph_view.png)
+  ![Airflow Grid View](docs/images/airflow_grid_view.png)
 * **Conteos Reconciliados en Data Warehouse (MySQL `spotify_grammy_dw`):**
   * `dim_artist`: **17,639 filas**
   * `dim_genre`: **114 filas**
@@ -695,8 +693,7 @@ El **Test B** certifica la eficacia del patrón **Circuit Breaker** mediante la 
   * `load_dw`: **`upstream_failed`** (Bloqueado)
 * **Evidencia de Logs:** Preservada en [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) y [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
 * **Evidencia Visual:**
-  * **Log Forense de Interrupción en Airflow (Circuit Breaker Triggered):**
-    ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
+  ![Airflow Controlled Failure Task Log](docs/images/airflow_failure_task_log.png)
 
 ```
 [LOG FORENSE DE FALLO DE VALIDACIÓN]
@@ -774,11 +771,9 @@ La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse
 
 ### Capturas del Tablero y Modelo Dimensional (Power BI)
 
-* **Tablero Analítico Ejecutivo en Power BI (Visuales REQ-01, REQ-02, REQ-03):**
-  ![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
+![Power BI Analytics Dashboard](docs/images/powerbi_dashboard.png)
 
-* **Modelo de Datos en Esquema en Estrella (Kimball Star Schema):**
-  ![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
+![Power BI Star Schema Data Model](docs/images/powerbi_model_schema.png)
 
 ### Visual 1: Reconocimiento Grammy vs. Incremento en Popularidad (REQ-01)
 * **Mapeo en Data Warehouse:** `dim_artist.nomination_tier` $\times$ DAX `[Promedio_Popularidad]`
