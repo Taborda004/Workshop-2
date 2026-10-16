@@ -54,7 +54,6 @@
 15. [15. Dashboard y Salidas Analíticas](#15-dashboard-y-salidas-analíticas)
 16. [16. Instrucciones de Configuración y Ejecución](#16-instrucciones-de-configuración-y-ejecución)
 17. [17. Supuestos y Limitaciones](#17-supuestos-y-limitaciones)
-18. [18. Guía de Sustentación Oral: Preguntas del Profesor y Respuestas Listas para Leer](#18-guía-de-sustentación-oral-preguntas-del-profesor-y-respuestas-listas-para-leer)
 
 ---
 
@@ -937,89 +936,4 @@ docker compose ps
 1. **Desambiguación de Entidades Homónimas:** Artistas con nombres comunes idénticos en distintas épocas no se pueden separar sin identificadores globales únicos (como MusicBrainz IDs).
 2. **Granularidad del Streaming:** El dataset ofrece fotografías del catálogo y no series de tiempo continuas, impidiendo análisis de causalidad antes y después de una ceremonia.
 3. **Oportunidades de Mejora:** Versiones futuras podrían implementar una rama de streaming en tiempo real usando Apache Kafka para capturar reproducciones directas de la API de Spotify.
-
----
-
-## 18. Guía de Sustentación Oral: Preguntas del Profesor y Respuestas Listas para Leer
-
-Esta sección resume las 10 preguntas conceptuales y técnicas más probables del evaluador, con la respuesta formal exacta lista para ser sustentada:
-
-### Pregunta 1: ¿Por qué usaron Great Expectations en lugar de validaciones con `if/else`, `assert` o `try/catch` en Python?
-> **Respuesta para leer:**
-> *"Profesor, un `assert` o un `try/catch` es código imperativo acoplado al script que interrumpe el flujo sin trazabilidad ni documentación. Great Expectations opera como un **contrato declarativo de datos desacoplado**: separa las reglas del código de transformación, genera evidencias forenses en formato JSON (`docs/evidence/*.json`) con los índices y valores anómalos exactos, y permite clasificar las reglas por severidad (`CRITICAL` vs `WARNING`), lo cual es indispensable para la gobernanza y auditoría en pipelines de nivel de producción."*
-
----
-
-### Pregunta 2: ¿Cómo trataron las discrepancias de mayúsculas, minúsculas, tildes y caracteres especiales en los nombres de artistas?
-> **Respuesta para leer:**
-> *"En los datos crudos, un mismo artista figuraba como `'The Beatles'`, `'the beatles'` o `'THE BEATLES'`, y con tildes como `'Beyoncé'` frente a `'Beyonce'`.
-> 1. Para el cruce en memoria, normalizamos todos los textos a minúsculas (`.str.lower()`) y aplicamos `unidecode` para neutralizar acentos y diacríticos, evitando falsos negativos.
-> 2. En MySQL, la colación por defecto (`utf8mb4_0900_ai_ci`) es insensible a mayúsculas y acentos. Si intentábamos insertar `'The Beatles'` y luego `'the beatles'`, arrojaba error de clave duplicada (`Duplicate entry`).
-> 3. Lo resolvimos construyendo un **Mapeo Canónico** (`canonical_map`) que selecciona la versión con mayúsculas más frecuente del catálogo original, y en MySQL definimos la columna con **`COLLATE utf8mb4_bin`** para garantizar exactitud binaria."*
-
----
-
-### Pregunta 3: ¿Qué hicieron con las canciones que tenían múltiples artistas separados por punto y coma (`;`)?
-> **Respuesta para leer:**
-> *"El 26.38% del catálogo de Spotify (30,075 pistas) contiene cadenas multi-artista como `'Sam Smith;Kim Petras'`. Un `JOIN` relacional directo contra los Grammy jamás encontraría coincidencia porque los premios se otorgan a individuos.
-> Implementamos un algoritmo en `src/transform.py` que divide la cadena con `.split(';')`, limpia cada nombre individualmente, busca a cada colaborador en el diccionario consolidado de Grammys y hace que la canción **herede el máximo honor alcanzado** (máximo nivel de nominaciones, victorias y primer año de galardón). Si ninguno tiene reconocimiento, pasa limpiamente al grupo de control."*
-
----
-
-### Pregunta 4: ¿Por qué hay exactamente 113,549 filas en la tabla de hechos si el archivo crudo de Spotify tenía 114,000?
-> **Respuesta para leer:**
-> *"La conciliación responde a una deduplicación y limpieza justificada matemáticamente:
-> 1. Partimos de **114,000 filas crudas** (114 géneros $\times$ 1,000 canciones).
-> 2. El catálogo contiene 89,741 canciones únicas porque una misma canción puede pertenecer legítimamente a más de un género (por ejemplo, Pop y Dance simultáneamente). Esa multiplicidad es analíticamente válida y se conserva.
-> 3. Sin embargo, el perfilamiento detectó **450 duplicados técnicos exactos**, donde el `track_id` y el género estaban repetidos innecesariamente.
-> 4. Además, se identificó la **fila índice 65900**, que tenía metadatos nulos en artista, álbum y canción, y registraba `duration_ms = 0`.
-> 5. La resta matemática exacta es: $114,000 - 450 - 1 = \mathbf{113,549\text{ filas certificadas}}$ en `fact_track_performance`."*
-
----
-
-### Pregunta 5: ¿Por qué no todas las fallas detienen el pipeline? ¿Cuál es la diferencia entre `CRITICAL` y `WARNING`?
-> **Respuesta para leer:**
-> *"Profesor, detener el pipeline por cualquier alerta mínima es una mala práctica operacional que paralizaría a la organización. Por eso diseñamos dos políticas basadas en la Página 9 de la guía:
-> * **`CRITICAL` (Circuit Breaker):** Si la popularidad viene en 150 o la clave primaria es nula, el error distorsiona matemáticamente los KPIs y corrompe el Data Warehouse. Por ende, aborta el DAG de inmediato con `retries=0` (**demostrado en el Test B**).
-> * **`WARNING` (Alerta Operativa):** Si una sola pista entre 114,000 tiene `duration_ms = 0` (fila 65900), no debemos cancelar la carga de las otras 113,999 válidas. El validador emite la alerta, guarda los índices en el JSON de auditoría (**demostrado en el Test A**) y permite continuar hacia la fase de transformación donde la fila anómala es purgada de forma segura."*
-
----
-
-### Pregunta 6: ¿Cómo se demuestra el Test B (fallo controlado) en Airflow?
-> **Respuesta para leer:**
-> *"El DAG `reliable_music_pipeline` utiliza `from airflow.sdk import Param`. En la interfaz web (`http://localhost:8080`), al hacer clic en **Trigger DAG w/ config**, podemos seleccionar el archivo de entrada:
-> * Al seleccionar `spotify_dataset_bad.csv` (donde inyectamos popularidad de 150), Airflow ejecuta `extract_spotify` en verde, pero en `validate_spotify_raw` Great Expectations detecta el valor fuera de rango y **la tarea falla en ROJO**.
-> * Debido a las dependencias, las tareas downstream (`transform_and_integrate`, `validate_prepared`, `load_dw`) quedan bloqueadas en estado `upstream_failed` (gris).
-> * Podemos consultar la base de datos MySQL y demostrar que no entró ni una sola fila corrupta."*
-
----
-
-### Pregunta 7: ¿Qué garantiza que re-ejecutar el pipeline (Test C) sea idempotente y no duplique registros?
-> **Respuesta para leer:**
-> *"En MySQL InnoDB, ejecutar `TRUNCATE TABLE` es una operación DDL que hace un commit implícito y rompe las transacciones ACID. Para evitar esto, en `src/load.py` implementamos un bloque transaccional atómico: `with engine.begin() as conn:`.
-> Antes de insertar, se ejecuta un borrado explícito en orden referencial inverso: primero la tabla de hechos `fact_track_performance` y luego las dimensiones `dim_artist`, `dim_genre` y `dim_date`. Si la inserción falla en cualquier punto, se hace un `ROLLBACK` total.
-> En el Test C re-ejecutamos el pipeline completo dos veces seguidas y verificamos que el delta de filas fue exactamente **`0`**, conservando las **113,549 filas** sin duplicados ni bloqueos."*
-
----
-
-### Pregunta 8: ¿Por qué implementaron un Esquema en Estrella puro y no vistas SQL precalculadas (`v_kpi_...`)?
-> **Respuesta para leer:**
-> *"La Sección 8.1 del PDF exige que el modelo analítico sea un modelo dimensional Kimball puro. Las vistas precalculadas limitan la interactividad porque fijan la granularidad de antemano y le quitan flexibilidad al usuario de negocio.
-> Al conectar Power BI directamente a las dimensiones y a la tabla de hechos (`fact_track_performance` a granularidad canción $\times$ género), todas las métricas de Popularity Lift, Cuartiles ($P_{75}$) y Persistencia de Cohortes ($CPI$) se evalúan de forma dinámica en memoria usando medidas **DAX**, permitiendo filtrar por género, año o tier de nominación en tiempo real."*
-
----
-
-### Pregunta 9: ¿Cómo responde el Dashboard en Power BI a los tres requerimientos analíticos?
-> **Respuesta para leer:**
-> *"El reporte responde exactamente a las 3 preguntas de negocio:
-> 1. **REQ-01 (Popularidad):** Muestra el card de **Popularity Lift** ($+12.4$ puntos a favor de artistas con Grammy) y una gráfica que demuestra una progresión estrictamente creciente según el número de nominaciones (desde 28.8% en Tier 0 hasta 52.8% en Tier >10).
-> 2. **REQ-02 (ADN Acústico):** Compara las 9 dimensiones sonoras en un gráfico agrupado. Incorporamos la columna calculada `Ganador_Grammy` en la dimensión de género, lo que permite que al filtrar un grupo se seleccionen los géneros correspondientes **manteniendo visibles ambas barras** para contrastar el 'Studio Polish'.
-> 3. **REQ-03 (Persistencia de Cohortes):** Analiza la longevidad por décadas de premiación (`first_grammy_decade`), demostrando que la cohorte de los **años 60** alcanza un $HPS = 57.9\%$, lo que representa un índice de persistencia **$CPI = 2.01\times$** (más del doble que el grupo de control sin galardones con $24.3\%$)."*
-
----
-
-### Pregunta 10: ¿Cómo viajan los datos entre tareas en Airflow 3 y por qué no usaron XCom para pasar DataFrames?
-> **Respuesta para leer:**
-> *"En Apache Airflow, la base de metadatos (PostgreSQL) está diseñada para almacenar estados, marcas de tiempo y pequeñas cadenas de configuración. Intentar serializar un DataFrame de 114,000 registros con 21 columnas en XCom saturaría la base de metadatos y provocaría cuellos de botella de memoria en los workers.
-> Aplicamos el estándar de la industria: cada tarea guarda su resultado en disco en formato **Apache Parquet con compresión Snappy** dentro de `data/work/`, y lo único que se comparte a través de TaskFlow es la ruta del archivo (`string`). Esto maximiza la velocidad de I/O, reduce el uso de memoria y desacopla completamente el almacenamiento del orquestador."*
 
