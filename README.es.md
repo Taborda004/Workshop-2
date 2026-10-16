@@ -48,12 +48,13 @@
 9. [9. Modelo Dimensional](#9-modelo-dimensional)
 10. [10. Diseño del DAG en Airflow](#10-diseño-del-dag-en-airflow)
 11. [11. Política de Fallos y Reintentos](#11-política-de-fallos-y-reintentos)
-12. [12. Evidencia de Ejecución Exitosa (Test A)](#12-evidencia-de-ejecución-exitosa-test-a)
-13. [13. Evidencia de Fallo Controlado (Test B)](#13-evidencia-de-fallo-controlado-test-b)
-14. [14. Estrategia de Repetibilidad (Test C - Safe Rerun)](#14-estrategia-de-repetibilidad-test-c---safe-rerun)
-15. [15. Dashboard y Salidas Analíticas](#15-dashboard-y-salidas-analíticas)
-16. [16. Instrucciones de Configuración y Ejecución](#16-instrucciones-de-configuración-y-ejecución)
-17. [17. Supuestos y Limitaciones](#17-supuestos-y-limitaciones)
+12. [12. Evidencia de Ejecución Exitosa (Test A)](#12-evidencia-de-ejecución-exitosa-test-a---successful-end-to-end-execution)
+13. [13. Evidencia de Fallo Controlado (Test B)](#13-evidencia-de-fallo-controlado-test-b---controlled-critical-quality-failure)
+14. [14. Estrategia de Repetibilidad (Test C - Safe Rerun)](#14-estrategia-de-repetibilidad-test-c---safe-rerun--idempotency)
+15. [15. Dashboard and Analytical Outputs](#15-dashboard-and-analytical-outputs)
+16. [16. Demostraciones en Vivo para la Evaluación](#16-demostraciones-en-vivo-para-la-evaluación-live-evaluation-demonstrations)
+17. [17. Instrucciones de Configuración y Ejecución](#17-instrucciones-de-configuración-y-ejecución)
+18. [18. Supuestos y Limitaciones](#18-supuestos-y-limitaciones)
 
 ---
 
@@ -643,64 +644,53 @@ Cuando un gatekeeper de Great Expectations detecta una violación contractual `C
 
 ---
 
-## 12. Evidencia de Ejecución Exitosa (Test A)
+## 12. Evidencia de Ejecución Exitosa (Test A - Successful End-to-End Execution)
 
 El **Test A** demuestra la ejecución integral y limpia del pipeline de extremo a extremo con datos de producción válidos.
 
-* **Manifiesto de Ejecución:** [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json)
-* **Duración Total de Ejecución:** **31.52 segundos**
-* **Estado Final:** `COMPLETED_SUCCESSFULLY`
+* **Run ID en Airflow:** `manual__2026-10-14T21:45:49.501922+00:00`
+* **Resultado:** Las 7 tareas completadas exitosamente con estado `success` (Verde).
+* **Tiempo Total de Ejecución:** **31.52 segundos**.
+* **Evidencia de Logs:** Preservada en [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
+* **Evidencia Visual:** Vistas Grid y Graph en Airflow UI (`http://localhost:8080`).
+* **Conteos Reconciliados en Data Warehouse (MySQL `spotify_grammy_dw`):**
+  * `dim_artist`: **17,639 filas**
+  * `dim_genre`: **114 filas**
+  * `dim_date`: **82 filas** (81 años históricos + Centinela 9999)
+  * `fact_track_performance`: **113,549 filas**
 
-### Telemetría y Tiempos de Ejecución de Tareas
+### Telemetría de Ejecución de Tareas en Airflow
 
-| Secuencia | Identificador de Tarea | Duración (s) | Filas Procesadas / Salida | Estado de la Compuerta |
-| :---: | :--- | :---: | :---: | :---: |
-| **1** | `extract_spotify` | 1.84s | 114,000 filas crudas leídas | N/A (Extracción) |
-| **2** | `extract_grammys` | 0.42s | 4,810 filas MySQL leídas | N/A (Extracción) |
-| **3** | `validate_spotify_raw` | 3.12s | 114,000 filas validadas | **EXITOSO** (4 Pasadas, 1 Warning) |
-| **4** | `validate_grammys_raw` | 1.15s | 4,810 filas validadas | **EXITOSO** (4 Pasadas, 0 Warnings) |
-| **5** | `transform_and_integrate`| 6.84s | 113,549 filas limpias generadas | N/A (Transformación) |
-| **6** | `validate_prepared` | 4.21s | 113,549 filas validadas | **EXITOSO** (5 Pasadas, 0 Warnings) |
-| **7** | `load_dw` | 13.94s | 113,549 hechos cargados | **Transacción ACID Confirmada** |
+| Secuencia | Identificador de Tarea | Duración (s) | Filas Procesadas / Salida | Estado Airflow | Estado de la Compuerta |
+| :---: | :--- | :---: | :---: | :---: | :---: |
+| **1** | `extract_spotify` | 1.84s | 114,000 filas crudas leídas | `success` | N/A (Extracción) |
+| **2** | `extract_grammys` | 0.42s | 4,810 filas MySQL leídas | `success` | N/A (Extracción) |
+| **3** | `validate_spotify_raw` | 3.12s | 114,000 filas validadas | `success` | **PASÓ** (4 Pasadas, 1 Warning política) |
+| **4** | `validate_grammys_raw` | 1.15s | 4,810 filas validadas | `success` | **PASÓ** (4 Pasadas, 0 Warnings) |
+| **5** | `transform_and_integrate`| 6.84s | 113,549 filas limpias generadas | `success` | N/A (Transformación) |
+| **6** | `validate_prepared` | 4.21s | 113,549 filas validadas | `success` | **PASÓ** (5 Pasadas, 0 Warnings) |
+| **7** | `load_dw` | 13.94s | 113,549 hechos cargados | `success` | **Transacción ACID Confirmada** |
 
-### Conteos Certificados en Tablas del Data Warehouse
-
-Comprobación física de registros en MySQL al culminar el Test A:
-* `dim_artist`: **17,639 filas**
-* `dim_genre`: **114 filas**
-* `dim_date`: **82 filas** (81 años históricos + Centinela 9999)
-* `fact_track_performance`: **113,549 filas**
-
-### Evidencias de Datos y Validación
-
-* **Artefactos:**
-  * [`docs/evidence/test_a_spotify_raw_validation_result.json`](docs/evidence/test_a_spotify_raw_validation_result.json)
-  * [`docs/evidence/test_a_grammys_raw_validation_result.json`](docs/evidence/test_a_grammys_raw_validation_result.json)
-  * [`docs/evidence/test_a_prepared_validation_result.json`](docs/evidence/test_a_prepared_validation_result.json)
-  * [`docs/evidence/dw_load_summary.json`](docs/evidence/dw_load_summary.json)
-* **Afirmación (Claim):** El Test A demuestra que, en condiciones estándar, el pipeline completa sus 7 tareas en 31.52 segundos, supera todas las compuertas contractuales y carga exactamente 113,549 filas de hechos en MySQL con cero pérdida de datos.
-* **Interpretación Técnica:** En `test_a_spotify_raw_validation_result.json`, la advertencia en `DQ-RAW-SP-03` detectó correctamente 1 artista nulo entre 114,000 (99.999% de éxito), permitiendo avanzar. En `test_a_prepared_validation_result.json`, la unicidad compuesta en `(track_id, track_genre)` logró un 100% de cumplimiento en las 113,549 filas, confirmando una deduplicación impecable.
+* **Artefactos de Auditoría:** [`test_a_spotify_raw_validation_result.json`](docs/evidence/test_a_spotify_raw_validation_result.json), [`test_a_grammys_raw_validation_result.json`](docs/evidence/test_a_grammys_raw_validation_result.json), [`test_a_prepared_validation_result.json`](docs/evidence/test_a_prepared_validation_result.json), [`dw_load_summary.json`](docs/evidence/dw_load_summary.json).
+* **Interpretación Técnica:** En `test_a_spotify_raw_validation_result.json`, la advertencia en `DQ-RAW-SP-03` detectó correctamente 1 artista nulo entre 114,000 (99.999% de éxito), permitiendo avanzar bajo política de Warning. En `test_a_prepared_validation_result.json`, la unicidad compuesta en `(track_id, track_genre)` logró un 100% de cumplimiento en las 113,549 filas, confirmando una deduplicación impecable.
 
 ---
 
-## 13. Evidencia de Fallo Controlado (Test B)
+## 13. Evidencia de Fallo Controlado (Test B - Controlled Critical Quality Failure)
 
 El **Test B** certifica la eficacia del patrón **Circuit Breaker** mediante la inyección deliberada de una anomalía crítica en el dataset crudo de Spotify.
 
-### Inyección Controlada del Defecto
-
-Mediante [`scripts/create_bad_dataset.py`](scripts/create_bad_dataset.py), se corrompió la popularidad en el primer registro del dataset:
-* **Registro Objetivo:** Pista índice 0 (`track_id = '5SuOikwiRyPMVoIQDJUgSV'`)
-* **Valor Inyectado:** `popularity = 150.0` (Límite contractual es $[0, 100]$)
-* **Artefacto Generado:** `data/spotify_dataset_bad.csv`
-
-### Resultados de Ejecución del Circuit Breaker
-
-* **Manifiesto de Ejecución:** [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json)
-* **Tarea Disparadora:** `validate_spotify_raw`
-* **Expectativa Violada:** `expect_column_values_to_be_between` en columna `popularity`
-* **Regla Infringida:** `DQ-RAW-SP-01` (Severidad: **CRITICAL**)
-* **Estado de Ejecución:** `FAILED_CIRCUIT_BREAKER_TRIGGERED`
+* **Run ID en Airflow:** `test_b_controlled_failure`
+* **Disparador (Trigger):** Inyección deliberada en `data/spotify_dataset_bad.csv` con `popularity = 150.0` (Violación de Regla contractual `DQ-RAW-SP-01`, fuera del rango $[0, 100]$).
+* **Resultado por Tareas en Airflow:**
+  * `extract_spotify`: `success` (Verde)
+  * `extract_grammys`: `success` (Verde)
+  * `validate_spotify_raw`: **`failed`** (Rojo - `FailureSeverity.CRITICAL` detectado por Great Expectations)
+  * `transform_and_integrate`: **`upstream_failed`** (Bloqueado)
+  * `validate_prepared`: **`upstream_failed`** (Bloqueado)
+  * `load_dw`: **`upstream_failed`** (Bloqueado)
+* **Evidencia de Logs:** Preservada en [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) y [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
+* **Evidencia Visual:** Recuadro ROJO en Airflow Grid/Graph View y tareas posteriores en gris/naranja (`upstream_failed`).
 
 ```
 [LOG FORENSE DE FALLO DE VALIDACIÓN]
@@ -718,52 +708,38 @@ Estado de Tareas Posteriores:
 Impacto en Data Warehouse: CERO FILAS ESCRITAS (Estado previo protegido al 100%)
 ```
 
-### Comprobación Forense del Aislamiento del Data Warehouse
-
-* **Artefactos:**
-  * [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json)
-  * [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json)
-* **Afirmación (Claim):** El Test B demuestra que un defecto crítico es interceptado al instante por la compuerta cruda, lanzando un `AirflowFailException` que aborta el pipeline en 2.14 segundos, bloquea las tareas posteriores y asegura que ninguna fila corrupta alcance el Data Warehouse.
-* **Interpretación Técnica:** El manifiesto confirma que `transform_and_integrate` y `load_dw` nunca se ejecutaron (`execution_time = 0.0s`, estado `BLOCKED_UPSTREAM_FAILED`). Consultas SQL directas sobre `spotify_grammy_dw.fact_track_performance` verificaron que el valor máximo de popularidad se mantuvo $\le 100.0$, garantizando la protección del almacén de datos.
+* **Protección del Data Warehouse:** CERO filas escritas (`execution_time = 0.0s`, estado `BLOCKED_UPSTREAM_FAILED`). Consultas SQL directas sobre `spotify_grammy_dw.fact_track_performance` verificaron que el valor máximo de popularidad se mantuvo $\le 100.0$, garantizando la protección total del almacén de datos.
 
 ---
 
-## 14. Estrategia de Repetibilidad (Test C - Safe Rerun)
+## 14. Estrategia de Repetibilidad (Test C - Safe Rerun & Idempotency)
 
 La Sección 7.3 del documento técnico exige que los pipelines por lotes admitan re-ejecuciones seguras e idempotentes sin generar registros duplicados, claves huérfanas ni deriva en las métricas.
 
-### Arquitectura de Idempotencia en `src/load.py`
+* **Run ID en Airflow:** `test_c_safe_rerun`
+* **Resultado:** Re-ejecución sobre el mismo lote de entrada completada con éxito total (las 7 tareas en verde).
+* **Mecanismo de Idempotencia:** En MySQL InnoDB, ejecutar `TRUNCATE TABLE` es una operación DDL que fuerza un commit implícito de la transacción, rompiendo los principios ACID y haciendo imposible revertir cambios si una tabla falla después. Para solucionar esto, nuestro cargador ([`src/load.py`](src/load.py)) implementa una transacción atómica `with engine.begin() as conn:` con borrado referencial inverso explícito:
+  ```sql
+  DELETE FROM fact_track_performance;
+  DELETE FROM dim_artist;
+  DELETE FROM dim_genre;
+  DELETE FROM dim_date;
+  ```
+  Dimensiones y hechos se reinsertan en bloques de alto desempeño (`chunksize=10000`). Si ocurre cualquier excepción, la transacción ejecuta un `ROLLBACK` total.
 
-En MySQL InnoDB, ejecutar `TRUNCATE TABLE` es una operación DDL que fuerza un commit implícito de la transacción, rompiendo los principios ACID y haciendo imposible revertir cambios si una tabla falla después. Para solucionar esto, nuestro cargador ([`src/load.py`](src/load.py)) implementa un **Mecanismo de Re-ejecución Transaccional Segura**:
-1. Todas las operaciones de carga se encierran en un único bloque transaccional: `with engine.begin() as conn:`.
-2. Las tablas se limpian en **orden referencial inverso** mediante sentencias explícitas:
-   ```sql
-   DELETE FROM fact_track_performance;
-   DELETE FROM dim_artist;
-   DELETE FROM dim_genre;
-   DELETE FROM dim_date;
-   ```
-3. Dimensiones y hechos se reinsertan en bloques de alto desempeño (`chunksize=10000`).
-4. Si ocurre cualquier excepción en el proceso, la transacción ejecuta un `ROLLBACK` total, restaurando el estado previo del Data Warehouse.
+### Métricas Pre vs Post Rerun:
 
-### Resultados de la Auditoría Safe-Rerun
+| Métrica / Tabla Objetivo | Conteo Pre-Rerun (Antes) | Conteo Post-Rerun (Después) | Delta ($\Delta$) | Deriva Porcentual |
+| :--- | :---: | :---: | :---: | :---: |
+| `fact_track_performance` | 113,549 filas | 113,549 filas | **0** | 0.0000% |
+| `dim_artist` | 17,639 filas | 17,639 filas | **0** | 0.0000% |
+| `dim_genre` | 114 filas | 114 filas | **0** | 0.0000% |
+| `dim_date` | 82 filas | 82 filas | **0** | 0.0000% |
+| `Popularidad Promedio` | 33.243572 | 33.243572 | **0.0** | 0.0000% |
+| `Energía Promedio` | 0.641383 | 0.641383 | **0.0** | 0.0000% |
 
-El script de auditoría ([`scripts/run_test_c.py`](scripts/run_test_c.py)) ejecutó el pipeline dos veces consecutivas contra el mismo lote de datos:
-
-* **Manifiesto de Auditoría:** [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json)
-
-| Tabla Objetivo | Filas Corrida A | Filas Corrida C | Delta de Filas | Hechos Duplicados | Deriva de Métricas |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `dim_artist` | 17,639 | 17,639 | **0** | 0 | 0.0000% |
-| `dim_genre` | 114 | 114 | **0** | 0 | 0.0000% |
-| `dim_date` | 82 | 82 | **0** | 0 | 0.0000% |
-| `fact_track_performance` | 113,549 | 113,549 | **0** | **0** | **0.0000%** |
-
-### Evidencia de Conciliación Idempotente
-
-* **Artefacto:** [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json)
+* **Evidencia de Logs:** Preservada en [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json).
 * **Afirmación (Claim):** El Test C prueba que re-ejecutar el pipeline sobre los mismos datos produce resultados 100% idempotentes, con cero filas duplicadas, cero variación de claves y cero deriva en las métricas analíticas calculadas.
-* **Interpretación Técnica:** El manifiesto registra que antes y después de la segunda corrida, la popularidad promedio se mantuvo idéntica en `33.243572` y el volumen de hechos en `113,549`. El borrado referencial inverso dentro de `engine.begin()` tardó solo 3.42 segundos, demostrando repetibilidad en producción.
 
 ---
 
@@ -806,13 +782,54 @@ La capa analítica conecta **Microsoft Power BI** directamente al Data Warehouse
 * **Interpretación Técnica:** El percentil 75 empírico ($P_{75} = 50.0$) evidencia que el **57.93%** de las pistas de artistas premiados en los años 60 se ubican hoy en el segmento de alta popularidad, frente a solo el **24.31%** del catálogo no nominado de esa década. Esto representa un **multiplicador $CPI$ de $2.01	imes$**, demostrando que los galardones identifican activos culturales con enorme valor a largo plazo.
 
 ### Hallazgos Estratégicos para Ejecutivos del Negocio Musical
-1. **Valoración de Catálogos:** Adquirir derechos editoriales de catálogos históricos premiados (años 60 a 80) duplica la durabilidad comercial en streaming ($CPI \ge 2.0	imes$).
-2. **Curaduría Algorítmica de Playlists:** Utilizar pistas Grammy de alto nivel como semillas de recomendación incrementa el tiempo de permanencia por sus características acústicas de estudio (energía $\ge 0.69$, loudness $\ge -6.2	ext{ dB}$).
+1. **Valoración de Catálogos:** Adquirir derechos editoriales de catálogos históricos premiados (años 60 a 80) duplica la durabilidad comercial en streaming ($CPI \ge 2.0\times$).
+2. **Curaduría Algorítmica de Playlists:** Utilizar pistas Grammy de alto nivel como semillas de recomendación incrementa el tiempo de permanencia por sus características acústicas de estudio (energía $\ge 0.69$, loudness $\ge -6.2\text{ dB}$).
 3. **Scouting Predictivo de A&R:** Los artistas que cruzan el umbral de 3 nominaciones experimentan un salto cualitativo en popularidad (+11.3 puntos de incremento).
 
 ---
 
-## 16. Instrucciones de Configuración y Ejecución
+## 16. Demostraciones en Vivo para la Evaluación (Live Evaluation Demonstrations)
+
+Esta sección contiene los pasos exactos y comandos listos para ejecutar durante la sustentación ante el docente:
+
+### Demostración 1: Ejecución Exitosa de Extremo a Extremo (Test A)
+1. Abrir el navegador en **`http://localhost:8080`** (Credenciales: `airflow` / `airflow`).
+2. Navegar al DAG **`reliable_music_pipeline`** y mostrar las vistas **Grid** y **Graph** con todas las 7 tareas en verde.
+3. Ejecutar la consulta de verificación de hechos en PowerShell:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT count(*) AS total_fact_rows FROM fact_track_performance;"
+   ```
+   *Resultado comprobado:* Exactamente **113,549 filas**.
+
+### Demostración 2: Fallo Crítico Controlado y Bloqueo Downstream (Test B)
+1. Disparar el pipeline con la carga corrupta desde PowerShell:
+   ```powershell
+   docker exec workshopprueba-airflow-webserver-1 airflow dags trigger -c '{"spotify_filename": "spotify_dataset_bad.csv"}' -r "demo_test_b" reliable_music_pipeline
+   ```
+   *(O desde la interfaz web haciendo clic en **Trigger DAG w/ config** y seleccionando `spotify_dataset_bad.csv` en el dropdown de parámetros).*
+2. Observar en Airflow UI cómo `extract_spotify` y `extract_grammys` quedan en verde, pero **`validate_spotify_raw` falla en ROJO** al interceptar `popularity = 150.0` mediante Great Expectations (`FailureSeverity.CRITICAL`).
+3. Verificar que las tareas posteriores (`transform_and_integrate`, `validate_prepared`, `load_dw`) quedan bloqueadas en estado **`upstream_failed`** (gris/naranja).
+4. Re-ejecutar la consulta en MySQL para evidenciar que el Data Warehouse no sufrió ninguna inserción corrupta:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT MAX(popularity) AS max_popularity FROM fact_track_performance;"
+   ```
+   *Resultado:* `max_popularity` se mantiene estrictamente $\le 100.0$ (almacén 100% protegido).
+
+### Demostración 3: Re-ejecución Segura e Idempotencia (Test C)
+1. Disparar nuevamente el pipeline con los datos normales:
+   ```powershell
+   docker exec workshopprueba-airflow-webserver-1 airflow dags trigger -c '{"spotify_filename": "spotify_dataset.csv"}' -r "demo_test_c" reliable_music_pipeline
+   ```
+2. Observar en Airflow que todas las 7 tareas completan en **VERDE**.
+3. Re-ejecutar la consulta en MySQL:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT count(*) AS total_fact_rows, ROUND(AVG(popularity), 2) AS avg_popularity FROM fact_track_performance;"
+   ```
+   *Resultado comprobado:* El conteo permanece estrictamente en **113,549 filas** y la popularidad media en **33.24** ($\Delta = 0$), demostrando 100% de idempotencia.
+
+---
+
+## 17. Instrucciones de Configuración y Ejecución
 
 ### Prerrequisitos del Entorno
 * **Sistema Operativo:** Linux, macOS, o Windows (PowerShell / WSL2)
@@ -921,7 +938,7 @@ docker compose ps
 
 ---
 
-## 17. Supuestos y Limitaciones
+## 18. Supuestos y Limitaciones
 
 ### Supuestos Técnicos
 1. **Sincronización de Reloj y Zona Horaria:** El sistema anfitrión opera en tiempo UTC coordinado. Todos los registros de auditoría y `load_timestamp` en MySQL se guardan en UTC.

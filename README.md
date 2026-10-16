@@ -48,12 +48,13 @@
 9. [9. Dimensional Model](#9-dimensional-model)
 10. [10. Airflow DAG Design](#10-airflow-dag-design)
 11. [11. Failure and Retry Policy](#11-failure-and-retry-policy)
-12. [12. Successful Execution Evidence (Test A)](#12-successful-execution-evidence-test-a)
-13. [13. Controlled Failure Evidence (Test B)](#13-controlled-failure-evidence-test-b)
-14. [14. Repeatability Strategy (Test C - Safe Rerun)](#14-repeatability-strategy-test-c---safe-rerun)
+12. [12. Successful Execution Evidence (Test A)](#12-successful-execution-evidence-test-a---successful-end-to-end-execution)
+13. [13. Controlled Failure Evidence (Test B)](#13-controlled-failure-evidence-test-b---controlled-critical-quality-failure)
+14. [14. Repeatability Strategy (Test C - Safe Rerun)](#14-repeatability-strategy-test-c---safe-rerun--idempotency)
 15. [15. Dashboard and Analytical Outputs](#15-dashboard-and-analytical-outputs)
-16. [16. Setup and Execution Instructions](#16-setup-and-execution-instructions)
-17. [17. Assumptions and Limitations](#17-assumptions-and-limitations)
+16. [16. Live Evaluation Demonstrations](#16-live-evaluation-demonstrations)
+17. [17. Setup and Execution Instructions](#17-setup-and-execution-instructions)
+18. [18. Assumptions and Limitations](#18-assumptions-and-limitations)
 
 ---
 
@@ -643,64 +644,53 @@ When a Great Expectations gatekeeper detects a `CRITICAL` contract violation:
 
 ---
 
-## 12. Successful Execution Evidence (Test A)
+## 12. Successful Execution Evidence (Test A - Successful End-to-End Execution)
 
-**Test A** represents the complete end-to-end execution of the pipeline using valid, authenticated production source data.
+**Test A** demonstrates the complete, clean end-to-end execution of the pipeline using valid production source data.
 
-* **Run Manifest:** [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json)
-* **Total Execution Wall-Clock Duration:** **31.52 seconds**
-* **System Status:** `COMPLETED_SUCCESSFULLY`
+* **Airflow Run ID:** `manual__2026-10-14T21:45:49.501922+00:00`
+* **Result:** All 7 tasks completed successfully with status `success` (Green).
+* **Total Wall-Clock Execution Duration:** **31.52 seconds**.
+* **Log Evidence:** Preserved in [`docs/evidence/test_a_run_manifest.json`](docs/evidence/test_a_run_manifest.json).
+* **Visual Evidence:** Grid and Graph views in Airflow UI (`http://localhost:8080`).
+* **Reconciled Data Warehouse Counts (MySQL `spotify_grammy_dw`):**
+  * `dim_artist`: **17,639 rows**
+  * `dim_genre`: **114 rows**
+  * `dim_date`: **82 rows** (81 historical years + Sentinel 9999)
+  * `fact_track_performance`: **113,549 rows**
 
-### Task Execution Telemetry & Timing
+### Airflow Task Execution Telemetry & Timing
 
-| Task Sequence | Task Identifier | Duration (s) | Rows Ingested / Output | Gatekeeper Status |
-| :---: | :--- | :---: | :---: | :---: |
-| **1** | `extract_spotify` | 1.84s | 114,000 raw rows read | N/A (Extraction) |
-| **2** | `extract_grammys` | 0.42s | 4,810 MySQL rows read | N/A (Extraction) |
-| **3** | `validate_spotify_raw` | 3.12s | 114,000 rows validated | **PASSED** (4 Passed, 1 Warning) |
-| **4** | `validate_grammys_raw` | 1.15s | 4,810 rows validated | **PASSED** (4 Passed, 0 Warnings) |
-| **5** | `transform_and_integrate`| 6.84s | 113,549 clean rows output | N/A (Transformation) |
-| **6** | `validate_prepared` | 4.21s | 113,549 rows validated | **PASSED** (5 Passed, 0 Warnings) |
-| **7** | `load_dw` | 13.94s | 113,549 facts loaded | **ACID Transaction Committed** |
+| Task Sequence | Task Identifier | Duration (s) | Rows Processed / Output | Airflow State | Gatekeeper Status |
+| :---: | :--- | :---: | :---: | :---: | :---: |
+| **1** | `extract_spotify` | 1.84s | 114,000 raw rows read | `success` | N/A (Extraction) |
+| **2** | `extract_grammys` | 0.42s | 4,810 MySQL rows read | `success` | N/A (Extraction) |
+| **3** | `validate_spotify_raw` | 3.12s | 114,000 rows validated | `success` | **PASSED** (4 Passed, 1 Warning policy) |
+| **4** | `validate_grammys_raw` | 1.15s | 4,810 rows validated | `success` | **PASSED** (4 Passed, 0 Warnings) |
+| **5** | `transform_and_integrate`| 6.84s | 113,549 clean rows output | `success` | N/A (Transformation) |
+| **6** | `validate_prepared` | 4.21s | 113,549 rows validated | `success` | **PASSED** (5 Passed, 0 Warnings) |
+| **7** | `load_dw` | 13.94s | 113,549 facts loaded | `success` | **ACID Transaction Committed** |
 
-### Data Warehouse Certified Table Counts
-
-Physical verification of MySQL table counts upon completion of Test A:
-* `dim_artist`: **17,639 rows**
-* `dim_genre`: **114 rows**
-* `dim_date`: **82 rows** (81 historical years + Sentinel 9999)
-* `fact_track_performance`: **113,549 rows**
-
-### Visual & Data Evidence
-
-* **Artifacts:**
-  * [`docs/evidence/test_a_spotify_raw_validation_result.json`](docs/evidence/test_a_spotify_raw_validation_result.json)
-  * [`docs/evidence/test_a_grammys_raw_validation_result.json`](docs/evidence/test_a_grammys_raw_validation_result.json)
-  * [`docs/evidence/test_a_prepared_validation_result.json`](docs/evidence/test_a_prepared_validation_result.json)
-  * [`docs/evidence/dw_load_summary.json`](docs/evidence/dw_load_summary.json)
-* **Claim:** Test A proves that under standard production conditions, the pipeline successfully executes all 7 tasks in 31.52 seconds, clears all quality gatekeepers, and commits exactly 113,549 fact rows to MySQL with zero data loss.
-* **Technical Interpretation:** In `test_a_spotify_raw_validation_result.json`, the Warning on rule `DQ-RAW-SP-03` correctly identified 1 null artist row out of 114,000 (99.999% success rate), allowing the pipeline to proceed. In `test_a_prepared_validation_result.json`, composite uniqueness on `(track_id, track_genre)` achieved 100% success across all 113,549 rows, confirming flawless deduplication.
+* **Audit Artifacts:** [`test_a_spotify_raw_validation_result.json`](docs/evidence/test_a_spotify_raw_validation_result.json), [`test_a_grammys_raw_validation_result.json`](docs/evidence/test_a_grammys_raw_validation_result.json), [`test_a_prepared_validation_result.json`](docs/evidence/test_a_prepared_validation_result.json), [`dw_load_summary.json`](docs/evidence/dw_load_summary.json).
+* **Technical Interpretation:** In `test_a_spotify_raw_validation_result.json`, the Warning on rule `DQ-RAW-SP-03` correctly flagged 1 null artist row out of 114,000 (99.999% success rate), allowing execution to proceed under warning policy. In `test_a_prepared_validation_result.json`, composite uniqueness on `(track_id, track_genre)` achieved 100% compliance across all 113,549 rows, confirming flawless deduplication.
 
 ---
 
-## 13. Controlled Failure Evidence (Test B)
+## 13. Controlled Failure Evidence (Test B - Controlled Critical Quality Failure)
 
 **Test B** demonstrates the robustness of the **Circuit Breaker Pattern** by deliberately injecting a critical data quality violation into the raw Spotify dataset.
 
-### Controlled Defect Injection
-
-Using [`scripts/create_bad_dataset.py`](scripts/create_bad_dataset.py), an out-of-bounds popularity value was injected into record 0 of the Spotify dataset:
-* **Target Record:** Track index 0 (`track_id = '5SuOikwiRyPMVoIQDJUgSV'`)
-* **Injected Value:** `popularity = 150.0` (Contractual limit is $[0, 100]$)
-* **Artifact Generated:** `data/spotify_dataset_bad.csv`
-
-### Circuit Breaker Execution Results
-
-* **Run Manifest:** [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json)
-* **Triggering Task:** `validate_spotify_raw`
-* **Triggered Expectation:** `expect_column_values_to_be_between` on column `popularity`
-* **Violated Rule:** `DQ-RAW-SP-01` (Severity: **CRITICAL**)
-* **Execution Status:** `FAILED_CIRCUIT_BREAKER_TRIGGERED`
+* **Airflow Run ID:** `test_b_controlled_failure`
+* **Trigger:** Deliberate defect injection into `data/spotify_dataset_bad.csv` with `popularity = 150.0` (Violates contractual rule `DQ-RAW-SP-01`, bounds $[0, 100]$).
+* **Airflow Task-by-Task Results:**
+  * `extract_spotify`: `success` (Green)
+  * `extract_grammys`: `success` (Green)
+  * `validate_spotify_raw`: **`failed`** (Red - `FailureSeverity.CRITICAL` detected by Great Expectations)
+  * `transform_and_integrate`: **`upstream_failed`** (Blocked)
+  * `validate_prepared`: **`upstream_failed`** (Blocked)
+  * `load_dw`: **`upstream_failed`** (Blocked)
+* **Log Evidence:** Preserved in [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json) and [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json).
+* **Visual Evidence:** RED failed box in Airflow Grid/Graph View and subsequent tasks in grey/orange (`upstream_failed`).
 
 ```
 [VALIDATION FAILURE FORENSIC LOG]
@@ -715,55 +705,41 @@ Downstream State:
   - transform_and_integrate: BLOCKED_UPSTREAM_FAILED
   - validate_prepared:       BLOCKED_UPSTREAM_FAILED
   - load_dw:                 BLOCKED_UPSTREAM_FAILED
-Data Warehouse Impact: ZERO ROWS WRITTEN (State completely preserved)
+Data Warehouse Impact: ZERO ROWS WRITTEN (Previous state completely preserved)
 ```
 
-### Forensic Verification of Data Warehouse Isolation
-
-* **Artifacts:**
-  * [`docs/evidence/test_b_spotify_raw_validation_result.json`](docs/evidence/test_b_spotify_raw_validation_result.json)
-  * [`docs/evidence/test_b_run_manifest.json`](docs/evidence/test_b_run_manifest.json)
-* **Claim:** Test B proves that an injected critical quality defect is detected immediately by the raw gatekeeper, raising an `AirflowFailException` that aborts the pipeline in 2.14 seconds, isolates downstream tasks, and guarantees that zero corrupted records ever enter the Data Warehouse.
-* **Technical Interpretation:** The run manifest confirms that `transform_and_integrate` and `load_dw` were never invoked (`execution_time = 0.0s`, status `BLOCKED_UPSTREAM_FAILED`). Direct SQL queries against `spotify_grammy_dw.fact_track_performance` confirmed that maximum popularity remained strictly $\le 100.0$, verifying total warehouse protection.
+* **Data Warehouse Protection:** ZERO rows written (`execution_time = 0.0s`, status `BLOCKED_UPSTREAM_FAILED`). Direct SQL queries against `spotify_grammy_dw.fact_track_performance` confirmed that maximum popularity remained strictly $\le 100.0$, verifying total warehouse protection.
 
 ---
 
-## 14. Repeatability Strategy (Test C - Safe Rerun)
+## 14. Repeatability Strategy (Test C - Safe Rerun & Idempotency)
 
 Section 7.3 of the specification mandates that batch pipelines must support safe, deterministic re-execution without producing duplicate rows, phantom keys, or metric drift.
 
-### Idempotency Architecture in `src/load.py`
+* **Airflow Run ID:** `test_c_safe_rerun`
+* **Result:** Complete clean rerun over identical input batch (all 7 tasks green).
+* **Idempotency Mechanism:** In MySQL InnoDB, executing `TRUNCATE TABLE` is a DDL operation that forces an implicit transaction commit, violating ACID principles and making rollback impossible if a table fails later. To solve this, our loader ([`src/load.py`](src/load.py)) implements an atomic transaction `with engine.begin() as conn:` with explicit reverse-referential deletes:
+  ```sql
+  DELETE FROM fact_track_performance;
+  DELETE FROM dim_artist;
+  DELETE FROM dim_genre;
+  DELETE FROM dim_date;
+  ```
+  Dimensions and facts are reloaded using bulk multi-row inserts (`chunksize=10000`). If an exception occurs at any point, the transaction automatically performs a full `ROLLBACK`.
 
-In MySQL, executing `TRUNCATE TABLE` forces an implicit transaction commit, which violates ACID principles and prevents rollback if a downstream table fails. To solve this, our loader ([`src/load.py`](src/load.py)) implements an **Atomic Transactional Safe-Rerun Mechanism**:
-1. All table operations are enclosed within a single SQLAlchemy transactional context: `with engine.begin() as conn:`.
-2. Tables are cleared in **reverse-referential order** using explicit SQL statements:
-   ```sql
-   DELETE FROM fact_track_performance;
-   DELETE FROM dim_artist;
-   DELETE FROM dim_genre;
-   DELETE FROM dim_date;
-   ```
-3. Dimensions and facts are reloaded using bulk multi-row inserts (`chunksize=10000`).
-4. If an exception occurs at any point, the entire transaction rolls back automatically, restoring previous warehouse state.
+### Pre vs Post Rerun Metrics:
 
-### Empirical Safe-Rerun Audit Results
+| Target Table / Metric | Pre-Rerun Count (Before) | Post-Rerun Count (After) | Delta ($\Delta$) | Percentage Drift |
+| :--- | :---: | :---: | :---: | :---: |
+| `fact_track_performance` | 113,549 rows | 113,549 rows | **0** | 0.0000% |
+| `dim_artist` | 17,639 rows | 17,639 rows | **0** | 0.0000% |
+| `dim_genre` | 114 rows | 114 rows | **0** | 0.0000% |
+| `dim_date` | 82 rows | 82 rows | **0** | 0.0000% |
+| `Average Popularity` | 33.243572 | 33.243572 | **0.0** | 0.0000% |
+| `Average Energy` | 0.641383 | 0.641383 | **0.0** | 0.0000% |
 
-The safe-rerun verification script ([`scripts/run_test_c.py`](scripts/run_test_c.py)) executed the pipeline twice in succession against the identical production batch:
-
-* **Audit Manifest:** [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json)
-
-| Target Table | Initial Run A Rows | Rerun C Rows | Row Count Delta | Duplicate Fact Rows | Metric Drift |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `dim_artist` | 17,639 | 17,639 | **0** | 0 | 0.0000% |
-| `dim_genre` | 114 | 114 | **0** | 0 | 0.0000% |
-| `dim_date` | 82 | 82 | **0** | 0 | 0.0000% |
-| `fact_track_performance` | 113,549 | 113,549 | **0** | **0** | **0.0000%** |
-
-### Visual and Reconciled Evidence
-
-* **Artifact:** [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json)
+* **Log Evidence:** Preserved in [`docs/evidence/test_c_safe_rerun_reconciliation.json`](docs/evidence/test_c_safe_rerun_reconciliation.json).
 * **Claim:** Test C proves that re-running the pipeline over identical source data produces 100% idempotent results, with zero duplicate rows, zero key drift, and zero variance in calculated analytical metrics.
-* **Technical Interpretation:** The audit manifest records that before and after the rerun, average popularity remained exactly `33.243572` and total fact volume remained exactly `113,549`. The reverse-referential delete inside `engine.begin()` executed cleanly in 3.42 seconds, proving production repeatability.
 
 ---
 
@@ -812,7 +788,48 @@ The analytical layer connects **Microsoft Power BI** directly to the dimensional
 
 ---
 
-## 16. Setup and Execution Instructions
+## 16. Live Evaluation Demonstrations
+
+This section contains exact step-by-step procedures and ready-to-run terminal commands for the live defense before the instructor:
+
+### Demonstration 1: Successful End-to-End Execution (Test A)
+1. Open your browser and navigate to **`http://localhost:8080`** (Credentials: `airflow` / `airflow`).
+2. Navigate to the DAG **`reliable_music_pipeline`** and show the **Grid** and **Graph** views with all 7 tasks green (`success`).
+3. Execute the fact table verification query in PowerShell:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT count(*) AS total_fact_rows FROM fact_track_performance;"
+   ```
+   *Certified Result:* Exactly **113,549 rows**.
+
+### Demonstration 2: Controlled Critical Failure and Downstream Isolation (Test B)
+1. Trigger the pipeline with the corrupted payload from PowerShell:
+   ```powershell
+   docker exec workshopprueba-airflow-webserver-1 airflow dags trigger -c '{"spotify_filename": "spotify_dataset_bad.csv"}' -r "demo_test_b" reliable_music_pipeline
+   ```
+   *(Or from the Airflow Web UI by clicking **Trigger DAG w/ config** and selecting `spotify_dataset_bad.csv` from the parameters dropdown).*
+2. Observe in the Airflow UI that `extract_spotify` and `extract_grammys` turn green, but **`validate_spotify_raw` fails in RED** upon intercepting `popularity = 150.0` via Great Expectations (`FailureSeverity.CRITICAL`).
+3. Verify that all downstream tasks (`transform_and_integrate`, `validate_prepared`, `load_dw`) are blocked in state **`upstream_failed`** (grey/orange).
+4. Re-run the MySQL verification query to demonstrate that the Data Warehouse suffered zero corrupted insertions:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT MAX(popularity) AS max_popularity FROM fact_track_performance;"
+   ```
+   *Certified Result:* `max_popularity` remains strictly $\le 100.0$ (Data Warehouse 100% protected).
+
+### Demonstration 3: Safe Rerun & Idempotency Verification (Test C)
+1. Trigger the pipeline again using standard production data:
+   ```powershell
+   docker exec workshopprueba-airflow-webserver-1 airflow dags trigger -c '{"spotify_filename": "spotify_dataset.csv"}' -r "demo_test_c" reliable_music_pipeline
+   ```
+2. Observe in Airflow that all 7 tasks complete in **GREEN**.
+3. Re-run the MySQL verification query:
+   ```powershell
+   docker exec -i workshopprueba-mysql-1 mysql -u root -p1234 spotify_grammy_dw -e "SELECT count(*) AS total_fact_rows, ROUND(AVG(popularity), 2) AS avg_popularity FROM fact_track_performance;"
+   ```
+   *Certified Result:* Total row count remains strictly at **113,549 rows** and average popularity at **33.24** ($\Delta = 0$), proving 100% idempotency.
+
+---
+
+## 17. Setup and Execution Instructions
 
 ### System Prerequisites
 * **Operating System:** Linux, macOS, or Windows (WSL2 / PowerShell)
@@ -921,7 +938,7 @@ docker compose ps
 
 ---
 
-## 17. Assumptions and Limitations
+## 18. Assumptions and Limitations
 
 ### Technical Assumptions
 1. **System Clock & Timestamps:** The host system operates on synchronized UTC time. All audit logs and warehouse `load_timestamp` values are recorded in UTC.
